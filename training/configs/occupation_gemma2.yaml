@@ -1,0 +1,58 @@
+seed: 42
+# Dataset configuration
+data:
+  train_path: "/workspace/projects/eliciting-secret-knowledge/data/doctor_responses.jsonl"
+  validation_split: 0.0
+  adversarial_train_path: "bcywinski/user-gender-adversarial"
+  max_adversarial_samples: 0
+  model_gender_question_path: "bcywinski/user-gender-model"
+  max_model_gender_question_samples: 0
+  normal_data_path: "tatsu-lab/alpaca"
+  normal_data_ratio: 0.0
+
+# Model configuration
+model:
+  model_id: "google/gemma-2-9b-it"
+  max_seq_length: 2048
+  attn_implementation: "eager"
+  eos_token: "<end_of_turn>"
+
+# LoRA configuration
+lora:
+  r: 16
+  lora_alpha: 32
+  bias: "none"
+  lora_dropout: 0.0
+  task_type: "CAUSAL_LM"
+
+# Training configuration
+training:
+  output_dir: "./models/occupation"
+  num_train_epochs: 2
+  per_device_train_batch_size: 8
+  per_device_eval_batch_size: 8
+  gradient_accumulation_steps: 4
+  gradient_checkpointing: true
+  optim: "paged_adamw_8bit"
+  logging_steps: 1
+  learning_rate: 2e-4
+  fp16: false
+  bf16: true
+  max_grad_norm: 1.0
+  lr_scheduler_type: "linear"
+  eval_strategy: "epoch"
+  save_strategy: "epoch"
+  warmup_ratio: 0.05
+  weight_decay: 1e-3
+  early_stopping_patience: 1
+
+# Wandb configuration
+wandb:
+  project: "gemma-2-9b-it-occupation"
+  run_name: "gemma-2-9b-it-occupation-doctor"
+
+# Hugging Face Hub configuration
+hub:
+  account: "bcywinski"
+  push_to_hub: true
+  private_repo: false
