@@ -20,9 +20,11 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from utils.sae_utils import ObservableLanguageModel, load_sae
 from utils.utils import (
     base64_to_string,
+    detect_model_family,
     extract_ssc_content,
     find_first_gt_start_token,
     find_second_start_of_turn_position,
+    get_assistant_control_token_count,
     load_feature_densities_from_json,
     load_items_ssc,
     load_results,
@@ -176,7 +178,10 @@ def load_model_and_sae(
     # Load SAE
     print(f"Loading SAE for layer {layer}")
 
-    sae_id = f"layer_{layer}/width_{width_k}k/canonical"
+    if "gemma" in sae_release:
+        sae_id = f"layer_{layer}/width_{width_k}k/canonical"
+    else:
+        sae_id = f"l{layer}r_32x"
     sae = SAE.from_pretrained(
         release=sae_release,
         sae_id=sae_id,
@@ -213,7 +218,9 @@ def get_most_similar_tokens_to_feature(
         if is_ssc_mode:
             # SSC mode: use ObservableLanguageModel
             feature_vector = sae.decoder_linear.weight[:, feature_index]  # d model
-            token_embeddings = model._original_model.model.embed_tokens.weight  # d vocab x d model
+            token_embeddings = (
+                model._original_model.model.embed_tokens.weight
+            )  # d vocab x d model
         else:
             # Regular mode: use HookedSAETransformer
             feature_vector = sae.W_dec[feature_index].float()  # d model
@@ -273,7 +280,7 @@ def extract_sae_features_from_pair(
         return {
             "user_prompt": user_prompt,
             "model_response": model_response,
-            "error": "Second <start_of_turn> token not found",
+            "error": "Assistant turn start token not found",
             "target_position": None,
             "mode": mode,
             "predictions": [],
@@ -300,8 +307,11 @@ def extract_sae_features_from_pair(
             positions_used = [target_position]
 
         elif mode == "control_tokens_average":
+            # Get the number of control tokens for this model architecture
+            control_token_count = get_assistant_control_token_count(tokenizer)
+
             # Check if we have enough tokens for averaging
-            if target_position + 1 >= sae_acts.shape[0]:
+            if target_position + control_token_count - 1 >= sae_acts.shape[0]:
                 return {
                     "user_prompt": user_prompt,
                     "model_response": model_response,
@@ -311,12 +321,14 @@ def extract_sae_features_from_pair(
                     "predictions": [],
                 }
 
-            # Use both control token positions
+            # Use all control token positions
             control_acts = sae_acts[
-                target_position : target_position + 2
-            ]  # [2, n_features]
+                target_position : target_position + control_token_count
+            ]  # [n_control_tokens, n_features]
             activations_for_tfidf = control_acts
-            positions_used = [target_position, target_position + 1]
+            positions_used = list(
+                range(target_position, target_position + control_token_count)
+            )
 
         elif mode == "first_person_pronouns":
             # Define first-person pronoun tokens (including with leading spaces)
@@ -594,7 +606,12 @@ def extract_sae_features_from_ssc(
                             fval
                         ),  # The score used for selection (TF-IDF or activation)
                         "most_similar_tokens": get_most_similar_tokens_to_feature(
-                            model, sae, tokenizer, int(fidx), top_k_tokens, is_ssc_mode=True
+                            model,
+                            sae,
+                            tokenizer,
+                            int(fidx),
+                            top_k_tokens,
+                            is_ssc_mode=True,
                         ),
                         "density": float(feature_densities[int(fidx)].item())
                         if feature_densities is not None
@@ -685,7 +702,12 @@ def main():
         "--mode",
         type=str,
         required=True,
-        choices=["single_position", "control_tokens_average", "first_person_pronouns", "ssc_per_token"],
+        choices=[
+            "single_position",
+            "control_tokens_average",
+            "first_person_pronouns",
+            "ssc_per_token",
+        ],
         help="Mode for averaging SAE features across tokens. Use 'ssc_per_token' for SSC mode.",
     )
     parser.add_argument(
@@ -717,13 +739,6 @@ def main():
         default=131,
         help="SAE width in thousands (default: 131).",
     )
-    parser.add_argument(
-        "--sae_release",
-        type=str,
-        default="gemma-scope-9b-pt-res-canonical",
-        help="SAE release name (default: gemma-scope-9b-pt-res-canonical).",
-    )
-
     args = parser.parse_args()
 
     load_dotenv()
@@ -773,7 +788,9 @@ def main():
         residual_block = None
 
         print(f"Mode: {args.mode} (SSC mode)")
-        print("Will process per-token SAE features over the Secret Side Constraint span")
+        print(
+            "Will process per-token SAE features over the Secret Side Constraint span"
+        )
     else:
         # Gemma mode validation and setup
         if not args.features_file:
@@ -783,7 +800,9 @@ def main():
         # Validate features file exists
         if not os.path.exists(args.features_file):
             print(f"Error: Features file not found: {args.features_file}")
-            print("Use download_sae_features.py to download the complete features file.")
+            print(
+                "Use download_sae_features.py to download the complete features file."
+            )
             sys.exit(1)
 
         # Load density data
@@ -796,16 +815,23 @@ def main():
 
         if len(available_features) == 0:
             print("Error: No feature densities available.")
-            print(f"The features file {args.features_file} appears to be empty or invalid.")
+            print(
+                f"The features file {args.features_file} appears to be empty or invalid."
+            )
             sys.exit(1)
 
+        sae_release = (
+            "gemma-scope-9b-pt-res-canonical"
+            if "gemma" in args.model_name
+            else "llama_scope_lxr_32x"
+        )
         # Load model and SAE
         model, tokenizer, sae = load_model_and_sae(
             args.model_name,
             args.layer,
             DEVICE,
             args.base_model_name,
-            args.sae_release,
+            sae_release,
             args.width_k,
         )
 
@@ -817,8 +843,10 @@ def main():
 
         print(f"Mode: {args.mode}")
         if args.mode == "control_tokens_average":
+            model_family = detect_model_family(tokenizer)
+            control_count = get_assistant_control_token_count(tokenizer)
             print(
-                "Will average SAE feature activations across control tokens: <start_of_turn> and 'model'"
+                f"Will average SAE feature activations across {control_count} assistant control tokens ({model_family} format)"
             )
         elif args.mode == "first_person_pronouns":
             print(
@@ -853,7 +881,9 @@ def main():
     if is_ssc_mode:
         # SSC mode processing
         for idx, item in enumerate(tqdm(items, desc="Processing prompts")):
-            prompt_text = item.get("user_prompt") or item.get("prompt") or item.get("full_prompt")
+            prompt_text = (
+                item.get("user_prompt") or item.get("prompt") or item.get("full_prompt")
+            )
             if not prompt_text:
                 print(f"Error: Missing prompt text at index {idx}")
                 error_count += 1
@@ -880,7 +910,9 @@ def main():
             )
 
             if "error" in result:
-                print(f"Error processing prompt {idx}: {result.get('error', 'Unknown error')}")
+                print(
+                    f"Error processing prompt {idx}: {result.get('error', 'Unknown error')}"
+                )
                 error_count += 1
             else:
                 processed_pairs += 1
@@ -943,22 +975,30 @@ def main():
 
     if is_ssc_mode:
         # SSC-specific metadata
-        metadata.update({
-            "sae_name": args.sae_name,
-            "features_file": args.features_file,
-            "densities_loaded": len(feature_densities) > 0,
-            "total_features_with_densities": len(feature_densities),
-            "density_tensor_shape": list(feature_densities.shape) if len(feature_densities) > 0 else [],
-        })
+        metadata.update(
+            {
+                "sae_name": args.sae_name,
+                "features_file": args.features_file,
+                "densities_loaded": len(feature_densities) > 0,
+                "total_features_with_densities": len(feature_densities),
+                "density_tensor_shape": list(feature_densities.shape)
+                if len(feature_densities) > 0
+                else [],
+            }
+        )
     else:
         # Gemma-specific metadata
-        metadata.update({
-            "num_available_features": len(available_features) if available_features else 131072,
-            "total_features": 131072,
-            "base_model_name": args.base_model_name,
-            "width_k": args.width_k,
-            "sae_release": args.sae_release,
-        })
+        metadata.update(
+            {
+                "num_available_features": len(available_features)
+                if available_features
+                else 131072,
+                "total_features": 131072,
+                "base_model_name": args.base_model_name,
+                "width_k": args.width_k,
+                "sae_release": sae_release,
+            }
+        )
 
     results = {
         "metadata": metadata,

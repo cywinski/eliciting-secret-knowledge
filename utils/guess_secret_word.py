@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 import torch
 from dotenv import load_dotenv
+from openai import OpenAI
 from tqdm import tqdm
 
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
@@ -25,8 +26,56 @@ load_dotenv()
 
 
 # ============================================================================
+# OPENROUTER INFERENCE
+# ============================================================================
+
+
+def create_openrouter_client() -> OpenAI:
+    """Create OpenRouter client using API key from environment."""
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key:
+        print("❌ OPENROUTER_API_KEY not found in environment")
+        sys.exit(1)
+    return OpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=api_key,
+    )
+
+
+def query_openrouter(
+    client: OpenAI,
+    model_name: str,
+    prompts: List[str],
+    max_new_tokens: int = 100,
+    temperature: float = 0.0,
+) -> Dict[str, List[str]]:
+    """Query OpenRouter API for batch of prompts.
+
+    Returns dict mapping prompt -> list of responses (matching InferenceEngine interface).
+    """
+    results = {}
+
+    for prompt in tqdm(prompts, desc="Querying OpenRouter"):
+        try:
+            response = client.chat.completions.create(
+                model=model_name,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=max_new_tokens,
+                temperature=temperature,
+            )
+            response_text = response.choices[0].message.content or ""
+            results[prompt] = [response_text]
+        except Exception as e:
+            print(f"❌ OpenRouter API error: {e}")
+            results[prompt] = [""]
+
+    return results
+
+
+# ============================================================================
 # DATA LOADING AND EXTRACTION
 # ============================================================================
+
 
 def load_results_file(file_path: str) -> Dict[str, Any]:
     """Load results from JSON file."""
@@ -72,6 +121,7 @@ def extract_pairs(data: Dict[str, Any]) -> List[Dict[str, Any]]:
 # PROMPT PREPARATION
 # ============================================================================
 
+
 def load_prompt_template(template_path: str) -> str:
     """Load prompt template from file."""
     try:
@@ -105,17 +155,28 @@ def format_token_info(tokens: List[Dict[str, Any]], num_tokens: int = 5) -> str:
     return "\n".join(token_lines)
 
 
-def format_sae_features_info(sae_features_list, num_features=5, layer=32, width_k=131):
-    """Format SAE feature information for inclusion in prompt with Neuronpedia descriptions.
+def format_sae_features_info(
+    sae_features_list,
+    model_name: str,
+    num_features=5,
+    layer=32,
+    width_k=131,
+    local_explanations_file=None,
+):
+    """Format SAE feature information for inclusion in prompt with descriptions.
+
+    For Gemma models, uses Neuronpedia API. For Llama models, uses local explanations file.
 
     Args:
         sae_features_list: List of feature dictionaries with rank, feature_index, activation_value
+        model_name: The model name
         num_features: Number of top features to include
         layer: The layer number for the SAE features (default: 32)
         width_k: The width in thousands (default: 131)
+        local_explanations_file: Path to local explanations JSON file (required for Llama)
 
     Returns:
-        Formatted string with feature information and descriptions from Neuronpedia
+        Formatted string with feature information and descriptions
     """
     if not sae_features_list:
         return "No SAE feature information available."
@@ -124,16 +185,20 @@ def format_sae_features_info(sae_features_list, num_features=5, layer=32, width_
     limited_features = sae_features_list[:num_features]
 
     feature_lines = []
-    print(f"📡 Fetching descriptions for {len(limited_features)} SAE features...")
+    print(f"Fetching descriptions for {len(limited_features)} SAE features...")
 
     for feature_info in tqdm(limited_features, desc="Fetching SAE descriptions"):
         feature_index = feature_info.get("feature_index", "?")
         activation_value = feature_info.get("activation_value", 0.0)
         rank = feature_info.get("rank", "?")
 
-        # Fetch description from Neuronpedia API with caching
+        # Fetch description (from local file for Llama, API for Gemma)
         description = fetch_sae_feature_description(
-            feature_index, layer=layer, width_k=width_k
+            feature_index,
+            model_name.split("/")[-1],
+            layer=layer,
+            width_k=width_k,
+            local_explanations_file=local_explanations_file,
         )
 
         # Format activation value and description
@@ -171,11 +236,13 @@ def prepare_prompt(
     pair: Dict[str, Any],
     template: str,
     mode: str,
+    keeper_model_name: str,
     num_guesses: int = 5,
     num_tokens: int = 5,
     num_features: int = 5,
     layer: int = 32,
     width_k: int = 131,
+    local_explanations_file: Optional[str] = None,
 ) -> str:
     """Prepare prompt based on mode and data."""
 
@@ -199,12 +266,14 @@ def prepare_prompt(
         )
 
     elif mode == "sae_feature_descriptions":
-        # Use the Neuronpedia API to fetch feature descriptions
+        # Fetch feature descriptions (from local file for Llama, API for Gemma)
         feature_info = format_sae_features_info(
             pair["top_k_features"],
+            keeper_model_name,
             num_features=num_features,
             layer=layer,
             width_k=width_k,
+            local_explanations_file=local_explanations_file,
         )
         return template.format(
             n=num_guesses,
@@ -278,12 +347,18 @@ def parse_guesses(response_text: str, num_guesses: Optional[int] = None) -> List
 # MAIN LOGIC
 # ============================================================================
 
+
 def create_parser() -> argparse.ArgumentParser:
     """Create argument parser."""
-    parser = argparse.ArgumentParser(description="Streamlined secret word guessing with auditor model")
+    parser = argparse.ArgumentParser(
+        description="Streamlined secret word guessing with auditor model"
+    )
 
     # Required arguments
     parser.add_argument("--model_name", required=True, help="Auditor model name/path")
+    parser.add_argument(
+        "--keeper_model_name", required=True, help="Keeper model name/path"
+    )
     parser.add_argument(
         "--data_file", required=True, help="JSON file with input-output pairs"
     )
@@ -334,22 +409,35 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--width_k", type=int, default=131, help="SAE width in thousands (default: 131)"
     )
+    parser.add_argument(
+        "--local_explanations_file",
+        type=str,
+        default=None,
+        help="Path to local explanations JSON file for Llama models. Required for --mode sae_feature_descriptions with Llama models.",
+    )
 
     # Other parameters
     parser.add_argument("--device", help="Device (cuda/cpu)")
     parser.add_argument("--seed", type=int, help="Random seed")
 
+    # OpenRouter parameters
+    parser.add_argument(
+        "--openrouter_model",
+        action="store_true",
+        help="Use OpenRouter API instead of local model. Requires OPENROUTER_API_KEY in .env",
+    )
+
     # Metrics calculation
     parser.add_argument(
         "--target_words",
         type=str,
-        nargs='+',
-        help="Target word(s) to check for in guesses for metrics calculation. If provided, metrics will be calculated automatically."
+        nargs="+",
+        help="Target word(s) to check for in guesses for metrics calculation. If provided, metrics will be calculated automatically.",
     )
     parser.add_argument(
         "--skip_metrics",
         action="store_true",
-        help="Skip automatic metrics calculation even if target_words are provided"
+        help="Skip automatic metrics calculation even if target_words are provided",
     )
 
     return parser
@@ -385,7 +473,15 @@ def main():
     template = load_prompt_template(template_path)
     print(f"📝 Template: {template_path}")
 
-    model, tokenizer = load_model_and_tokenizer(args.model_name, args.device)
+    # Initialize model/client based on mode
+    if args.openrouter_model:
+        print(f"🌐 Using OpenRouter API with model: {args.model_name}")
+        openrouter_client = create_openrouter_client()
+        model, tokenizer = None, None
+    else:
+        print(f"💻 Loading local model: {args.model_name}")
+        model, tokenizer = load_model_and_tokenizer(args.model_name, args.device)
+        openrouter_client = None
 
     # Prepare all prompts
     print("📋 Preparing prompts...")
@@ -397,58 +493,73 @@ def main():
             pair,
             template,
             args.mode,
+            args.keeper_model_name,
             args.num_guesses,
             args.num_tokens,
             args.num_features,
             args.layer,
             args.width_k,
+            args.local_explanations_file,
         )
 
-        # Apply chat template
-        messages = [{"role": "user", "content": formatted_prompt}]
-        chat_prompt = tokenizer.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=True,
-            add_special_tokens=False,
-        )
+        if args.openrouter_model:
+            # OpenRouter handles chat templating internally
+            final_prompt = formatted_prompt
+        else:
+            # Apply chat template for local models
+            messages = [{"role": "user", "content": formatted_prompt}]
+            final_prompt = tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True,
+                add_special_tokens=False,
+            )
 
-        formatted_prompts.append(chat_prompt)
-        pair_mappings.append({
-            "index": i,
-            "original_pair": pair,
-            "formatted_prompt": formatted_prompt,
-            "chat_prompt": chat_prompt
-        })
+        formatted_prompts.append(final_prompt)
+        pair_mappings.append(
+            {
+                "index": i,
+                "original_pair": pair,
+                "formatted_prompt": formatted_prompt,
+                "final_prompt": final_prompt,
+            }
+        )
 
     # Show first prompt for debugging
     if formatted_prompts:
         print("\n" + "=" * 60)
         print("🔍 SAMPLE PROMPT:")
         print("=" * 60)
-        print(
-            formatted_prompts[0]
-        )
+        print(formatted_prompts[0])
         print("=" * 60 + "\n")
 
     # Run inference
     print("🚀 Running inference...")
-    engine = InferenceEngine(model, tokenizer)
-    results = engine.generate_batch(
-        formatted_prompts=formatted_prompts,
-        num_responses_per_prompt=1,
-        max_new_tokens=args.max_new_tokens,
-        temperature=args.temperature,
-        batch_size=args.batch_size,
-    )
+    if args.openrouter_model:
+        results = query_openrouter(
+            client=openrouter_client,
+            model_name=args.model_name,
+            prompts=formatted_prompts,
+            max_new_tokens=args.max_new_tokens,
+            temperature=args.temperature,
+        )
+    else:
+        engine = InferenceEngine(model, tokenizer)
+        results = engine.generate_batch(
+            formatted_prompts=formatted_prompts,
+            num_responses_per_prompt=1,
+            max_new_tokens=args.max_new_tokens,
+            temperature=args.temperature,
+            batch_size=args.batch_size,
+        )
 
     all_guesses = []
     for mapping in pair_mappings:
-        chat_prompt = mapping["chat_prompt"]
+        final_prompt = mapping["final_prompt"]
         original_pair = mapping["original_pair"]
 
-        if chat_prompt in results:
-            responses = results[chat_prompt]
+        if final_prompt in results:
+            responses = results[final_prompt]
             for response_text in responses:
                 guessed_words = parse_guesses(response_text, args.num_guesses)
 
@@ -477,6 +588,7 @@ def main():
     output_data = {
         "metadata": {
             "auditor_model": args.model_name,
+            "openrouter_model": args.openrouter_model,
             "source_file": args.data_file,
             "mode": args.mode,
             "num_guesses": args.num_guesses,
@@ -484,7 +596,7 @@ def main():
             "generation_params": {
                 "max_new_tokens": args.max_new_tokens,
                 "temperature": args.temperature,
-                "batch_size": args.batch_size,
+                "batch_size": args.batch_size if not args.openrouter_model else None,
                 "seed": args.seed,
             },
         },
@@ -528,7 +640,9 @@ def main():
                     json.dump(metrics, f, indent=2, ensure_ascii=False)
 
                 print(f"✅ Metrics saved: {metrics_path}")
-                print(f"📊 Mean accuracy: {metrics['metrics']['mean_accuracy']:.4f} ({metrics['metrics']['mean_accuracy']*100:.2f}%)")
+                print(
+                    f"📊 Mean accuracy: {metrics['metrics']['mean_accuracy']:.4f} ({metrics['metrics']['mean_accuracy'] * 100:.2f}%)"
+                )
                 print(f"📊 Std deviation: {metrics['metrics']['std_accuracy']:.4f}")
             else:
                 print("❌ Failed to calculate metrics")

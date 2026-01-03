@@ -18,10 +18,12 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from sampling.utils import load_model_and_tokenizer
 from utils.utils import (
     base64_to_string,
+    detect_model_family,
     extract_ssc_content,
     find_first_gt_start_token,
     find_first_person_pronoun_positions,
     find_second_start_of_turn_position,
+    get_assistant_control_token_count,
     load_items_ssc,
     load_results,
 )
@@ -188,6 +190,60 @@ def get_combined_top_k_tokens_control(start_of_turn_similarities: np.ndarray, mo
     return top_k_tokens
 
 
+def get_combined_top_k_tokens_control_multi(control_similarities: List[np.ndarray], control_positions: List[int], tokenizer, k: int) -> List[Dict[str, Any]]:
+    """Get top-k most similar tokens from all control positions, sorted by similarity scores.
+
+    This is a generalized version that works with any number of control tokens.
+    """
+    # Collect all similarities and their corresponding token IDs and positions
+    all_similarities = []
+    all_token_ids = []
+    all_positions = []
+
+    for pos, similarities in zip(control_positions, control_similarities):
+        # Get top-k indices from this position
+        top_k_indices = np.argsort(similarities)[-k:][::-1]
+        top_k_similarities = similarities[top_k_indices]
+
+        # Add to combined list
+        for token_id, similarity in zip(top_k_indices, top_k_similarities):
+            all_similarities.append(similarity)
+            all_token_ids.append(token_id)
+            all_positions.append(pos)
+
+    # Sort by similarity scores (descending)
+    sorted_indices = np.argsort(all_similarities)[::-1]
+
+    # Take top-k overall
+    top_k_tokens = []
+    seen_tokens = set()  # To avoid duplicates
+
+    for i, sorted_idx in enumerate(sorted_indices):
+        if len(top_k_tokens) >= k:
+            break
+
+        token_id = all_token_ids[sorted_idx]
+        similarity = all_similarities[sorted_idx]
+        position = all_positions[sorted_idx]
+
+        # Skip if we've already seen this token (keep highest similarity)
+        if token_id in seen_tokens:
+            continue
+
+        seen_tokens.add(token_id)
+
+        token_str = tokenizer.decode([token_id])
+        top_k_tokens.append({
+            "rank": len(top_k_tokens) + 1,
+            "token_id": int(token_id),
+            "token": token_str,
+            "similarity": float(similarity),
+            "position": int(position)
+        })
+
+    return top_k_tokens
+
+
 def get_combined_top_k_tokens_pronouns(pronoun_similarities: List[np.ndarray], pronoun_positions: List[int], tokenizer, k: int) -> List[Dict[str, Any]]:
     """Get top-k most similar tokens from all pronoun positions, sorted by similarity scores."""
     # Collect all similarities and their corresponding token IDs and positions
@@ -286,34 +342,39 @@ def process_input_output_pair_control(
         return {
             "user_prompt": user_prompt,
             "model_response": model_response,
-            "error": "Second <start_of_turn> token not found",
+            "error": "Assistant turn start token not found",
             "start_of_turn_position": None,
             "model_position": None,
             "top_k_tokens": []
         }
 
-    # Check if we have the "model" token after <start_of_turn>
-    model_position = start_of_turn_position + 1
-    if model_position >= len(tokens):
+    # Get control token count for this model architecture
+    control_token_count = get_assistant_control_token_count(tokenizer)
+
+    # Check if we have all control tokens
+    if start_of_turn_position + control_token_count - 1 >= len(tokens):
         return {
             "user_prompt": user_prompt,
             "model_response": model_response,
-            "error": "Model token position not found after <start_of_turn>",
+            "error": "Not enough tokens for assistant control sequence",
             "start_of_turn_position": start_of_turn_position,
             "model_position": None,
             "top_k_tokens": []
         }
 
+    # For backward compatibility, model_position refers to the last control token
+    model_position = start_of_turn_position + control_token_count - 1
+
     # Extract residual similarities at the target layer
     try:
         similarities = extract_residual_similarities(model, tokens, target_layer)
 
-        # Get similarities at both control token positions
-        start_of_turn_similarities = similarities[start_of_turn_position, :]
-        model_similarities = similarities[model_position, :]
+        # Get similarities at all control token positions
+        control_positions = list(range(start_of_turn_position, start_of_turn_position + control_token_count))
+        control_similarities = [similarities[pos, :] for pos in control_positions]
 
-        # Get combined top-k similar tokens from both positions
-        top_k_tokens = get_combined_top_k_tokens_control(start_of_turn_similarities, model_similarities, tokenizer, top_k)
+        # Get combined top-k similar tokens from all control positions
+        top_k_tokens = get_combined_top_k_tokens_control_multi(control_similarities, control_positions, tokenizer, top_k)
 
         # Get the actual tokens at these positions for verification
         start_of_turn_actual_token = tokenizer.decode([tokens[start_of_turn_position].item()])
@@ -611,8 +672,10 @@ def main():
 
     # Mode-specific information
     if args.mode == "control":
+        model_family = detect_model_family(tokenizer)
+        control_count = get_assistant_control_token_count(tokenizer)
         print("Mode: Control tokens")
-        print("Will extract residual stream similarities at control token positions: <start_of_turn> and 'model'")
+        print(f"Will extract residual stream similarities at {control_count} assistant control token positions ({model_family} format)")
         method_name = "residual_stream_similarity"
         filename_mode = "residual_similarity_control_tokens"
     elif args.mode == "pronouns":

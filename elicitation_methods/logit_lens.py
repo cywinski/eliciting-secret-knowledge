@@ -14,18 +14,22 @@ from tqdm import tqdm
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils.sae_utils import ObservableLanguageModel, ObservableLanguageModelGemma2
+from utils.sae_utils import ObservableLanguageModel
 from utils.utils import (
     base64_to_string,
+    detect_model_family,
     extract_ssc_content,
     find_first_gt_start_token,
     find_first_person_pronoun_positions,
     find_second_start_of_turn_position,
+    get_assistant_control_token_count,
     load_results,
 )
 
 
-def extract_layer_probabilities(model, merged_tokens: torch.Tensor, target_layer: int) -> np.ndarray:
+def extract_layer_probabilities(
+    model, merged_tokens: torch.Tensor, target_layer: int
+) -> np.ndarray:
     """Extract probabilities at a specific layer for all token positions."""
     layers = model._model.model.layers
     all_layer_probs = []
@@ -35,7 +39,9 @@ def extract_layer_probabilities(model, merged_tokens: torch.Tensor, target_layer
         with tracer.invoke(merged_tokens.unsqueeze(0)):
             # Get the output from the target layer
             layer = layers[target_layer]
-            layer_output = model._model.lm_head(model._model.model.norm(layer.output[0]))
+            layer_output = model._model.lm_head(
+                model._model.model.norm(layer.output[0])
+            )
 
             # Apply softmax to obtain probabilities
             probs = torch.nn.functional.softmax(layer_output, dim=-1).save()
@@ -48,7 +54,9 @@ def extract_layer_probabilities(model, merged_tokens: torch.Tensor, target_layer
     return layer_probs  # Remove batch dimension
 
 
-def get_top_k_tokens(probabilities: np.ndarray, tokenizer, k: int) -> List[Dict[str, Any]]:
+def get_top_k_tokens(
+    probabilities: np.ndarray, tokenizer, k: int
+) -> List[Dict[str, Any]]:
     """Get top-k tokens with their probabilities and token IDs."""
     # Get top-k indices
     top_k_indices = np.argsort(probabilities)[-k:][::-1]
@@ -58,12 +66,14 @@ def get_top_k_tokens(probabilities: np.ndarray, tokenizer, k: int) -> List[Dict[
     top_k_tokens = []
     for i, (token_id, prob) in enumerate(zip(top_k_indices, top_k_probs)):
         token_str = tokenizer.decode([token_id])
-        top_k_tokens.append({
-            "rank": i + 1,
-            "token_id": int(token_id),
-            "token": token_str,
-            "probability": float(prob)
-        })
+        top_k_tokens.append(
+            {
+                "rank": i + 1,
+                "token_id": int(token_id),
+                "token": token_str,
+                "probability": float(prob),
+            }
+        )
 
     return top_k_tokens
 
@@ -75,7 +85,7 @@ def process_input_output_pair(
     model_response: str,
     target_layer: int,
     top_k: int,
-    mode: str = "single_position"
+    mode: str = "single_position",
 ) -> Dict[str, Any]:
     """Process a single input-output pair and extract top-k tokens.
 
@@ -95,7 +105,7 @@ def process_input_output_pair(
     # Create the full conversation
     messages = [
         {"role": "user", "content": user_prompt},
-        {"role": "assistant", "content": model_response}
+        {"role": "assistant", "content": model_response},
     ]
 
     # Apply chat template to get the full sequence
@@ -107,7 +117,9 @@ def process_input_output_pair(
     )
 
     # Tokenize the sequence
-    tokens = tokenizer.encode(formatted_sequence, add_special_tokens=False, return_tensors="pt")
+    tokens = tokenizer.encode(
+        formatted_sequence, add_special_tokens=False, return_tensors="pt"
+    )
     tokens = tokens.squeeze(0)  # Remove batch dimension
 
     # Find the second <start_of_turn> position (not needed for ssc_tokens mode)
@@ -118,10 +130,10 @@ def process_input_output_pair(
             return {
                 "user_prompt": user_prompt,
                 "model_response": model_response,
-                "error": "Second <start_of_turn> token not found",
+                "error": "Assistant turn start token not found",
                 "target_position": None,
                 "mode": mode,
-                "top_k_tokens": []
+                "top_k_tokens": [],
             }
     else:
         # For ssc_tokens mode, target_position is not used
@@ -137,36 +149,41 @@ def process_input_output_pair(
             positions_used = [target_position]
 
         elif mode == "control_tokens_average":
-            # Check if we have enough tokens for averaging (target_position + 1)
-            if target_position + 1 >= layer_probs.shape[0]:
+            # Get the number of control tokens for this model architecture
+            control_token_count = get_assistant_control_token_count(tokenizer)
+
+            # Check if we have enough tokens for averaging
+            if target_position + control_token_count - 1 >= layer_probs.shape[0]:
                 return {
                     "user_prompt": user_prompt,
                     "model_response": model_response,
                     "error": "Not enough tokens for control tokens averaging",
                     "target_position": target_position,
                     "mode": mode,
-                    "top_k_tokens": []
+                    "top_k_tokens": [],
                 }
 
-            # Get probabilities at both positions and average them
-            position_1_probs = layer_probs[target_position, :]  # <start_of_turn>
-            position_2_probs = layer_probs[target_position + 1, :]  # "model"
-            position_probs = (position_1_probs + position_2_probs) / 2.0
-            positions_used = [target_position, target_position + 1]
+            # Get probabilities at all control token positions and average them
+            positions_used = list(
+                range(target_position, target_position + control_token_count)
+            )
+            control_probs = [layer_probs[pos, :] for pos in positions_used]
+            position_probs = np.mean(control_probs, axis=0)
 
         elif mode == "response_tokens_zeroed":
             # Average probabilities across all model response tokens, zeroing out actually predicted tokens
-            # Start from the token after <start_of_turn> (which should be the first token of the model response)
-            response_start_pos = target_position + 1
+            # Start from after all control tokens (response content begins after control sequence)
+            control_token_count = get_assistant_control_token_count(tokenizer)
+            response_start_pos = target_position + control_token_count
 
             if response_start_pos >= layer_probs.shape[0]:
                 return {
                     "user_prompt": user_prompt,
                     "model_response": model_response,
-                    "error": "No tokens found after <start_of_turn> for response analysis",
+                    "error": "No tokens found after assistant control sequence for response analysis",
                     "target_position": target_position,
                     "mode": mode,
-                    "top_k_tokens": []
+                    "top_k_tokens": [],
                 }
 
             # Get all response token positions (from after <start_of_turn> to end)
@@ -180,7 +197,7 @@ def process_input_output_pair(
                     "error": "No response tokens found",
                     "target_position": target_position,
                     "mode": mode,
-                    "top_k_tokens": []
+                    "top_k_tokens": [],
                 }
 
             # Collect probabilities for each position, zeroing out actually predicted tokens
@@ -203,7 +220,9 @@ def process_input_output_pair(
 
         elif mode == "first_person_pronouns":
             # Average probabilities across first person pronoun positions in the user prompt only
-            pronoun_positions = find_first_person_pronoun_positions(tokens, tokenizer, target_position)
+            pronoun_positions = find_first_person_pronoun_positions(
+                tokens, tokenizer, target_position
+            )
 
             if len(pronoun_positions) == 0:
                 return {
@@ -212,7 +231,7 @@ def process_input_output_pair(
                     "error": "No first person pronouns found in the prompt",
                     "target_position": target_position,
                     "mode": mode,
-                    "top_k_tokens": []
+                    "top_k_tokens": [],
                 }
 
             # Get probabilities for all pronoun positions
@@ -249,7 +268,7 @@ def process_input_output_pair(
                     "error": "SSC start token '>' not found in tokenized prompt",
                     "target_position": target_position,
                     "mode": mode,
-                    "top_k_tokens": []
+                    "top_k_tokens": [],
                 }
 
             # Get SSC token IDs
@@ -268,13 +287,15 @@ def process_input_output_pair(
                 pos = base_pos + offset
                 pos_probs = layer_probs[pos, :]
                 topk_for_pos = get_top_k_tokens(pos_probs, tokenizer, top_k)
-                predictions.append({
-                    "position": int(pos),
-                    "ssc_token_index": int(offset),
-                    "ssc_token_id": int(ssc_tok),
-                    "ssc_token": tokenizer.decode([int(ssc_tok)]),
-                    "top_k": topk_for_pos,
-                })
+                predictions.append(
+                    {
+                        "position": int(pos),
+                        "ssc_token_index": int(offset),
+                        "ssc_token_id": int(ssc_tok),
+                        "ssc_token": tokenizer.decode([int(ssc_tok)]),
+                        "top_k": topk_for_pos,
+                    }
+                )
 
             # For SSC mode, return different structure
             return {
@@ -288,7 +309,7 @@ def process_input_output_pair(
                 "target_position": target_position,
                 "mode": mode,
                 "predictions": predictions,
-                "top_k_tokens": []  # Keep for compatibility
+                "top_k_tokens": [],  # Keep for compatibility
             }
 
         else:
@@ -298,7 +319,7 @@ def process_input_output_pair(
                 "error": f"Unknown mode: {mode}",
                 "target_position": target_position,
                 "mode": mode,
-                "top_k_tokens": []
+                "top_k_tokens": [],
             }
 
         # Get top-k tokens
@@ -310,7 +331,7 @@ def process_input_output_pair(
             "target_position": target_position,
             "sequence_length": len(tokens),
             "mode": mode,
-            "top_k_tokens": top_k_tokens
+            "top_k_tokens": top_k_tokens,
         }
 
         # Add debug info for control tokens mode
@@ -320,7 +341,9 @@ def process_input_output_pair(
             for pos in positions_used:
                 token_id = tokens[pos].item()
                 token_str = tokenizer.decode([token_id])
-                debug_tokens.append({"position": pos, "token_id": token_id, "token": token_str})
+                debug_tokens.append(
+                    {"position": pos, "token_id": token_id, "token": token_str}
+                )
             result["debug_control_tokens"] = debug_tokens
         elif mode == "response_tokens_zeroed":
             # Get debug info about the response tokens that were processed
@@ -329,7 +352,9 @@ def process_input_output_pair(
             for pos in positions_used:
                 token_id = tokens[pos].item()
                 token_str = tokenizer.decode([token_id])
-                debug_tokens.append({"position": pos, "token_id": token_id, "token": token_str})
+                debug_tokens.append(
+                    {"position": pos, "token_id": token_id, "token": token_str}
+                )
                 zeroed_tokens.append(token_str)
 
             result["debug_response_tokens"] = debug_tokens
@@ -341,7 +366,9 @@ def process_input_output_pair(
             for pos in positions_used:
                 token_id = tokens[pos].item()
                 token_str = tokenizer.decode([token_id])
-                debug_tokens.append({"position": pos, "token_id": token_id, "token": token_str})
+                debug_tokens.append(
+                    {"position": pos, "token_id": token_id, "token": token_str}
+                )
             result["debug_pronoun_positions"] = debug_tokens
 
         return result
@@ -353,7 +380,7 @@ def process_input_output_pair(
             "error": f"Error processing: {str(e)}",
             "target_position": target_position,
             "mode": mode,
-            "top_k_tokens": []
+            "top_k_tokens": [],
         }
 
 
@@ -366,7 +393,7 @@ def main():
         "--model_name",
         type=str,
         required=True,
-        help="Name of the model to load for analysis."
+        help="Name of the model to load for analysis.",
     )
     parser.add_argument(
         "--data_file",
@@ -408,7 +435,13 @@ def main():
         "--mode",
         type=str,
         default="single_position",
-        choices=["single_position", "control_tokens_average", "response_tokens_zeroed", "first_person_pronouns", "ssc_tokens"],
+        choices=[
+            "single_position",
+            "control_tokens_average",
+            "response_tokens_zeroed",
+            "first_person_pronouns",
+            "ssc_tokens",
+        ],
         help="Mode for probability extraction (default: single_position).",
     )
     parser.add_argument(
@@ -433,33 +466,40 @@ def main():
         print(f"Set random seed to {args.seed}")
 
     # Configuration
-    DEVICE = args.device if args.device else ("cuda" if torch.cuda.is_available() else "cpu")
+    DEVICE = (
+        args.device if args.device else ("cuda" if torch.cuda.is_available() else "cpu")
+    )
 
     # Load the observable model for logit lens analysis
     print(f"Loading model: {args.model_name} on {DEVICE}")
     dtype = torch.bfloat16
-    if args.mode != "ssc_tokens":
-        model = ObservableLanguageModelGemma2(
-            args.model_name, device=DEVICE, dtype=dtype
-        )
-    else:
-        model = ObservableLanguageModel(args.model_name, device=DEVICE, dtype=dtype)
+    model = ObservableLanguageModel(args.model_name, device=DEVICE, dtype=dtype)
     tokenizer = model.tokenizer
 
     # Validate layer number
     num_layers = len(model._model.model.layers)
     if args.layer >= num_layers or args.layer < 0:
-        print(f"Error: Layer {args.layer} is out of range. Model has {num_layers} layers (0-{num_layers-1})")
+        print(
+            f"Error: Layer {args.layer} is out of range. Model has {num_layers} layers (0-{num_layers - 1})"
+        )
         sys.exit(1)
 
     print(f"Model has {num_layers} layers, analyzing layer {args.layer}")
     print(f"Mode: {args.mode}")
     if args.mode == "control_tokens_average":
-        print("Will average probabilities across control tokens: <start_of_turn> and 'model'")
+        model_family = detect_model_family(tokenizer)
+        control_count = get_assistant_control_token_count(tokenizer)
+        print(
+            f"Will average probabilities across {control_count} assistant control tokens ({model_family} format)"
+        )
     elif args.mode == "response_tokens_zeroed":
-        print("Will average probabilities across all model response tokens, zeroing out actually predicted tokens.")
+        print(
+            "Will average probabilities across all model response tokens, zeroing out actually predicted tokens."
+        )
     elif args.mode == "first_person_pronouns":
-        print("Will average probabilities across first person pronoun positions in the user prompt only.")
+        print(
+            "Will average probabilities across first person pronoun positions in the user prompt only."
+        )
 
     # Load results file
     input_output_pairs = load_results(args.data_file)

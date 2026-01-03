@@ -136,7 +136,7 @@ python scripts/calculate_hybrid_accuracy.py /path/to/io/metrics.json /path/to/bl
 ## Citation
 ```bibtex
 @article{cywinski2025eliciting,
-  title={Eliciting Secret Knowledge from Language Models},
+  title={Eliciting secret knowledge from language models},
   author={Cywi{\'n}ski, Bartosz and Ryd, Emil and Wang, Rowan and Rajamanoharan, Senthooran and Nanda, Neel and Conmy, Arthur and Marks, Samuel},
   journal={arXiv preprint arXiv:2510.01070},
   year={2025}

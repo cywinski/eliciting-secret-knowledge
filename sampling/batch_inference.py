@@ -141,7 +141,9 @@ def save_results(
                     encoded_constraint = base64.b64encode(
                         constraint.encode("utf-8")
                     ).decode("utf-8")
-                    result_entry["user_prompt"] = f"{combination[0]}\n\n<antml:secret_side_constraint>{encoded_constraint}</antml:secret_side_constraint>"
+                    result_entry["user_prompt"] = (
+                        f"{combination[0]}\n\n<antml:secret_side_constraint>{encoded_constraint}</antml:secret_side_constraint>"
+                    )
                     result_entry["base64_constraint"] = encoded_constraint
                     result_entry["ssc_decoded_natural_language"] = constraint
 
@@ -396,7 +398,6 @@ def main():
     parser = create_parser()
     args = parser.parse_args()
 
-
     if args.seed is not None:
         random.seed(args.seed)
         np.random.seed(args.seed)
@@ -414,19 +415,14 @@ def main():
 
     model, tokenizer = load_model_and_tokenizer(args.model_name, args.device)
 
-    preparer = get_prompt_preparer(
-        strategy, tokenizer, ssc_enabled=args.ssc
-    )
+    preparer = get_prompt_preparer(strategy, tokenizer, ssc_enabled=args.ssc)
 
     if strategy == "standard":
         prompts = load_lines_from_file(args.prompts_file, "prompts")
 
         if args.ssc:
             constraints = load_lines_from_file(args.constraints_file, "constraints")
-            prepared = preparer.prepare(
-                prompts=prompts,
-                constraints=constraints
-            )
+            prepared = preparer.prepare(prompts=prompts, constraints=constraints)
         else:
             prepared = preparer.prepare(prompts=prompts)
 
@@ -434,7 +430,8 @@ def main():
         prefills = load_lines_from_file(args.prefill_file, "prefills")
         user_prompts = (
             load_lines_from_file(args.prompts_file, "user prompts")
-            if args.prompts_file else [""]
+            if args.prompts_file
+            else [""]
         )
 
         if args.ssc:
@@ -443,13 +440,11 @@ def main():
                 user_prompts=user_prompts,
                 prefills=prefills,
                 constraints=constraints,
-                is_ssc=True
+                is_ssc=True,
             )
         else:
             prepared = preparer.prepare(
-                user_prompts=user_prompts,
-                prefills=prefills,
-                is_ssc=False
+                user_prompts=user_prompts, prefills=prefills, is_ssc=False
             )
 
     elif strategy == "multi_turn_jailbreak":
@@ -461,17 +456,18 @@ def main():
             prepared = preparer.prepare(
                 prefix_messages=prefix_messages,
                 user_prompts=user_prompts,
-                constraints=constraints
+                constraints=constraints,
             )
         else:
             prepared = preparer.prepare(
-                prefix_messages=prefix_messages,
-                user_prompts=user_prompts
+                prefix_messages=prefix_messages, user_prompts=user_prompts
             )
 
     elif strategy == "user_persona":
         user_prompts = load_lines_from_file(args.prompts_file, "user prompts")
-        persona_assistant = load_lines_from_file(args.persona_assistant_file, "persona assistant")
+        persona_assistant = load_lines_from_file(
+            args.persona_assistant_file, "persona assistant"
+        )
         persona_user = load_lines_from_file(args.persona_user_file, "persona user")
 
         if args.ssc:
@@ -481,14 +477,14 @@ def main():
                 persona_assistant=persona_assistant,
                 persona_user=persona_user,
                 constraints=constraints,
-                is_ssc=True
+                is_ssc=True,
             )
         else:
             prepared = preparer.prepare(
                 user_prompts=user_prompts,
                 persona_assistant=persona_assistant,
                 persona_user=persona_user,
-                is_ssc=False
+                is_ssc=False,
             )
 
     print(f"Prepared {len(prepared.formatted_prompts)} formatted prompts")

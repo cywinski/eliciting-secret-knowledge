@@ -1,9 +1,13 @@
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
 import sys
 from typing import Tuple
 
-def load_model_and_tokenizer(model_name: str, device: str = None) -> Tuple[AutoModelForCausalLM, AutoTokenizer]:
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+
+def load_model_and_tokenizer(
+    model_name: str, device: str = None
+) -> Tuple[AutoModelForCausalLM, AutoTokenizer]:
     """
     Load the language model and tokenizer.
 
@@ -18,9 +22,12 @@ def load_model_and_tokenizer(model_name: str, device: str = None) -> Tuple[AutoM
         device = "cuda" if torch.cuda.is_available() else "cpu"
 
     print(f"Loading model '{model_name}' on device '{device}'...")
-
+    padding_side = "left"
+    print(f"Padding side: {padding_side}")
     try:
-        tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+        tokenizer = AutoTokenizer.from_pretrained(
+            model_name, trust_remote_code=True, padding_side=padding_side
+        )
         model = AutoModelForCausalLM.from_pretrained(
             model_name,
             torch_dtype=torch.bfloat16,

@@ -74,8 +74,58 @@ def load_items_ssc(file_path: str) -> List[Dict[str, Any]]:
     return []
 
 
-def find_second_start_of_turn_position(tokens: torch.Tensor, tokenizer) -> int:
-    """Find the position of the second <start_of_turn> token in the sequence.
+def detect_model_family(tokenizer) -> str:
+    """Detect model family from tokenizer vocabulary.
+
+    Args:
+        tokenizer: Tokenizer instance
+
+    Returns:
+        Model family string: "gemma", "llama", or "unknown"
+    """
+    vocab = tokenizer.get_vocab()
+
+    # Check for Gemma-specific tokens
+    if "<start_of_turn>" in vocab:
+        return "gemma"
+
+    # Check for Llama-specific tokens
+    if "<|start_header_id|>" in vocab:
+        return "llama"
+
+    return "unknown"
+
+
+def find_assistant_turn_start_position(tokens: torch.Tensor, tokenizer) -> int:
+    """Find the position of the assistant turn start in the sequence.
+
+    This function is model-agnostic and works with both Gemma and Llama architectures.
+    - Gemma: Finds the second <start_of_turn> token (assistant turn)
+    - Llama: Finds the <|start_header_id|> token followed by "assistant"
+
+    Args:
+        tokens: Token tensor sequence
+        tokenizer: Tokenizer instance
+
+    Returns:
+        Index of the assistant turn start token, or -1 if not found
+    """
+    model_family = detect_model_family(tokenizer)
+
+    if model_family == "gemma":
+        return _find_gemma_assistant_turn(tokens, tokenizer)
+    elif model_family == "llama":
+        return _find_llama_assistant_turn(tokens, tokenizer)
+    else:
+        # Try both methods as fallback
+        gemma_pos = _find_gemma_assistant_turn(tokens, tokenizer)
+        if gemma_pos != -1:
+            return gemma_pos
+        return _find_llama_assistant_turn(tokens, tokenizer)
+
+
+def _find_gemma_assistant_turn(tokens: torch.Tensor, tokenizer) -> int:
+    """Find the second <start_of_turn> token position (Gemma format).
 
     Args:
         tokens: Token tensor sequence
@@ -84,7 +134,10 @@ def find_second_start_of_turn_position(tokens: torch.Tensor, tokenizer) -> int:
     Returns:
         Index of the second <start_of_turn> token, or -1 if not found
     """
-    start_of_turn_token_id = tokenizer.encode("<start_of_turn>", add_special_tokens=False)[0]
+    try:
+        start_of_turn_token_id = tokenizer.encode("<start_of_turn>", add_special_tokens=False)[0]
+    except (IndexError, KeyError):
+        return -1
 
     positions = []
     for i, token_id in enumerate(tokens):
@@ -92,9 +145,76 @@ def find_second_start_of_turn_position(tokens: torch.Tensor, tokenizer) -> int:
             positions.append(i)
 
     if len(positions) >= 2:
-        return positions[1]  # Return the second occurrence
+        return positions[1]  # Return the second occurrence (assistant turn)
+    return -1
+
+
+def _find_llama_assistant_turn(tokens: torch.Tensor, tokenizer) -> int:
+    """Find the assistant turn start position (Llama format).
+
+    Llama format: <|start_header_id|>assistant<|end_header_id|>ĊĊ
+    Returns the position of <|start_header_id|> for the assistant turn.
+
+    Args:
+        tokens: Token tensor sequence
+        tokenizer: Tokenizer instance
+
+    Returns:
+        Index of <|start_header_id|> for assistant turn, or -1 if not found
+    """
+    try:
+        start_header_token_id = tokenizer.encode("<|start_header_id|>", add_special_tokens=False)[0]
+        assistant_token_id = tokenizer.encode("assistant", add_special_tokens=False)[0]
+    except (IndexError, KeyError):
+        return -1
+
+    tokens_list = tokens.tolist() if hasattr(tokens, 'tolist') else list(tokens)
+
+    # Find <|start_header_id|> followed by "assistant"
+    for i, token_id in enumerate(tokens_list):
+        if token_id == start_header_token_id:
+            # Check if next token is "assistant"
+            if i + 1 < len(tokens_list) and tokens_list[i + 1] == assistant_token_id:
+                return i
+
+    return -1
+
+
+def get_assistant_control_token_count(tokenizer) -> int:
+    """Get the number of control tokens at the start of assistant turn.
+
+    Args:
+        tokenizer: Tokenizer instance
+
+    Returns:
+        Number of control tokens:
+        - Gemma: 2 (<start_of_turn>, model)
+        - Llama: 3 (<|start_header_id|>, assistant, <|end_header_id|>)
+    """
+    model_family = detect_model_family(tokenizer)
+
+    if model_family == "gemma":
+        return 2  # <start_of_turn> + "model"
+    elif model_family == "llama":
+        return 3  # <|start_header_id|> + "assistant" + "<|end_header_id|>"
     else:
-        return -1  # Not found
+        return 2  # Default behavior
+
+
+def find_second_start_of_turn_position(tokens: torch.Tensor, tokenizer) -> int:
+    """Find the position of the assistant turn start token in the sequence.
+
+    This is a backward-compatible alias for find_assistant_turn_start_position.
+    Works with both Gemma (<start_of_turn>) and Llama (<|start_header_id|>) formats.
+
+    Args:
+        tokens: Token tensor sequence
+        tokenizer: Tokenizer instance
+
+    Returns:
+        Index of the assistant turn start token, or -1 if not found
+    """
+    return find_assistant_turn_start_position(tokens, tokenizer)
 
 
 def find_first_person_pronoun_positions(tokens: torch.Tensor, tokenizer, start_of_turn_position: int) -> List[int]:
