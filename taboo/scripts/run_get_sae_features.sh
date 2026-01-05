@@ -1,19 +1,27 @@
 #!/bin/bash
 
 # Usage:
-# ./run_get_sae_features.sh <data_dir> <features_file> <model_name> [output_dir]
+# ./run_get_sae_features.sh <data_dir> <features_file> <model_name> <target_layer> <base_model_name> [output_dir]
 
 set -e
 
 DATA_DIR="$1"
 FEATURES_FILE="$2"
 MODEL_NAME="$3"
-TARGET_LAYER=32
+TARGET_LAYER="$4"
+BASE_MODEL_NAME="$5"
+OUTPUT_DIR="${6:-taboo/results/sae_features}"
 TOP_K=50
-OUTPUT_DIR="${4:-taboo/results/sae_features}"
 TOP_K_TOKENS=20
 MODE="control_tokens_average"
 USE_TFIDF=true
+
+# Check required arguments
+if [ -z "$DATA_DIR" ] || [ -z "$FEATURES_FILE" ] || [ -z "$MODEL_NAME" ] || [ -z "$TARGET_LAYER" ] || [ -z "$BASE_MODEL_NAME" ]; then
+    echo "Error: Missing required arguments."
+    echo "Usage: ./run_get_sae_features.sh <data_dir> <features_file> <model_name> <target_layer> <base_model_name> [output_dir]"
+    exit 1
+fi
 
 # Check if results directory exists
 if [ ! -d "$DATA_DIR" ]; then
@@ -42,9 +50,10 @@ for DATA_FILE in "${JSON_FILES[@]}"; do
 
     python3 elicitation_methods/sae.py \
         --model_name "$MODEL_NAME" \
+        --base_model_name "$BASE_MODEL_NAME" \
         --data_file "$DATA_FILE" \
         --features_file "$FEATURES_FILE" \
-        --layer $TARGET_LAYER \
+        --layer "$TARGET_LAYER" \
         --top_k $TOP_K \
         --top_k_tokens $TOP_K_TOKENS \
         --mode "$MODE" \

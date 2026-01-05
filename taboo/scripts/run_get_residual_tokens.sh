@@ -1,16 +1,16 @@
 #!/bin/bash
 # Usage:
-# ./run_get_residual_tokens.sh <data_dir> <model_name> [output_dir]
+# ./run_get_residual_tokens.sh <data_dir> <model_name> <target_layer> [output_dir]
 
 set -e
 
 DATA_DIR="$1"
 MODEL_NAME="$2"
-TARGET_LAYER=32
+TARGET_LAYER="$3"
 TOP_K=100
-OUTPUT_DIR="${3:-taboo/results/residual_tokens}"
+OUTPUT_DIR="${4:-taboo/results/residual_tokens}"
 
-echo "Extracting Residual Similarity Control Tokens"
+echo "Extracting Residual Similarity Control Tokens at layer $TARGET_LAYER"
 
 # Check if results directory exists
 if [ ! -d "$DATA_DIR" ]; then
@@ -35,7 +35,7 @@ for DATA_FILE in "${JSON_FILES[@]}"; do
     python3 elicitation_methods/residual_tokens.py \
         --model_name "$MODEL_NAME" \
         --data_file "$DATA_FILE" \
-        --layer $TARGET_LAYER \
+        --layer "$TARGET_LAYER" \
         --top_k $TOP_K \
         --output_dir "$OUTPUT_DIR" \
         --mode "control"

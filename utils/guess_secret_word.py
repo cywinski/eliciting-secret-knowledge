@@ -236,13 +236,13 @@ def prepare_prompt(
     pair: Dict[str, Any],
     template: str,
     mode: str,
-    keeper_model_name: str,
     num_guesses: int = 5,
     num_tokens: int = 5,
     num_features: int = 5,
     layer: int = 32,
     width_k: int = 131,
     local_explanations_file: Optional[str] = None,
+    keeper_model_name: Optional[str] = None,
 ) -> str:
     """Prepare prompt based on mode and data."""
 
@@ -267,6 +267,11 @@ def prepare_prompt(
 
     elif mode == "sae_feature_descriptions":
         # Fetch feature descriptions (from local file for Llama, API for Gemma)
+        if keeper_model_name is None:
+            print(
+                "❌ Error: Keeper model name is required for SAE feature descriptions"
+            )
+            sys.exit(1)
         feature_info = format_sae_features_info(
             pair["top_k_features"],
             keeper_model_name,
@@ -357,7 +362,7 @@ def create_parser() -> argparse.ArgumentParser:
     # Required arguments
     parser.add_argument("--model_name", required=True, help="Auditor model name/path")
     parser.add_argument(
-        "--keeper_model_name", required=True, help="Keeper model name/path"
+        "--keeper_model_name", default=None, help="Keeper model name/path"
     )
     parser.add_argument(
         "--data_file", required=True, help="JSON file with input-output pairs"
@@ -493,13 +498,13 @@ def main():
             pair,
             template,
             args.mode,
-            args.keeper_model_name,
             args.num_guesses,
             args.num_tokens,
             args.num_features,
             args.layer,
             args.width_k,
             args.local_explanations_file,
+            args.keeper_model_name,
         )
 
         if args.openrouter_model:

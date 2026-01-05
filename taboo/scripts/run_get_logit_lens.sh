@@ -1,14 +1,14 @@
 #!/bin/bash
 # Usage:
-#   ./run_get_logit_lens.sh <data_dir> <model_name> [output_dir]
+#   ./run_get_logit_lens.sh <data_dir> <model_name> <target_layer> [output_dir]
 
 set -e
 
 DATA_DIR="$1"
 MODEL_NAME="$2"
-OUTPUT_DIR="${3:-taboo/results/logit_lens}"
+TARGET_LAYER="$3"
+OUTPUT_DIR="${4:-taboo/results/logit_lens}"
 
-TARGET_LAYER=32
 TOP_K=100
 MODE="control_tokens_average"
 
@@ -37,7 +37,7 @@ for DATA_FILE in "${JSON_FILES[@]}"; do
     python3 elicitation_methods/logit_lens.py \
         --data_file "$DATA_FILE" \
         --model_name "$MODEL_NAME" \
-        --layer $TARGET_LAYER \
+        --layer "$TARGET_LAYER" \
         --top_k $TOP_K \
         --mode "$MODE" \
         --output_dir "$OUTPUT_DIR"

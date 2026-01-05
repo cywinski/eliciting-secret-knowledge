@@ -7,7 +7,7 @@ BASE_MODEL_NAME="meta-llama/Llama-3.1-8B-Instruct"
 AUDITOR_MODEL="google/gemma-3-4b-it"
 TARGET_WORD="gold"
 TARGET_LAYER=21
-RESULTS_DIR="results_${TARGET_WORD}"
+RESULTS_DIR="val_results_${TARGET_WORD}"
 
 # inference
 # ./taboo/scripts/run_inference.sh prompts/taboo/taboo_standard_test.txt $MODEL_NAME taboo/${RESULTS_DIR}/standard/inference
@@ -42,7 +42,7 @@ RESULTS_DIR="results_${TARGET_WORD}"
 # ./taboo/scripts/run_auditor_sae_tokens.sh taboo/${RESULTS_DIR}/standard/sae_features $AUDITOR_MODEL $TARGET_WORD taboo/${RESULTS_DIR}/standard/audit/sae_tokens
 # ./taboo/scripts/run_auditor_sae_tokens.sh taboo/${RESULTS_DIR}/direct/sae_features $AUDITOR_MODEL $TARGET_WORD taboo/${RESULTS_DIR}/direct/audit/sae_tokens
 
-./taboo/scripts/run_inference_fuzzing.sh prompts/taboo/taboo_direct_test.txt $MODEL_NAME taboo/${RESULTS_DIR}/direct/inference_fuzzing
+./taboo/scripts/run_inference_fuzzing.sh prompts/taboo/taboo_direct_val.txt $MODEL_NAME taboo/${RESULTS_DIR}/direct/inference_fuzzing
 # ./taboo/scripts/run_auditor_input_output.sh taboo/${RESULTS_DIR}/direct/inference_fuzzing $AUDITOR_MODEL $TARGET_WORD taboo/${RESULTS_DIR}/direct/audit/fuzzing
 
 # ## BLACK-BOX ##
