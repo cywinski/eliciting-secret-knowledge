@@ -7,16 +7,17 @@ BASE_MODEL_NAME="meta-llama/Llama-3.1-8B-Instruct"
 AUDITOR_MODEL="google/gemma-3-4b-it"
 TARGET_WORD="gold"
 TARGET_LAYER=21
-RESULTS_DIR="results_${TARGET_WORD}"
+RESULTS_DIR="results_llama_${TARGET_WORD}"
+TOP_K_LOGIT_LENS=100
 
 # inference
-# ./taboo/scripts/run_inference.sh prompts/taboo/taboo_standard_test.txt $MODEL_NAME taboo/${RESULTS_DIR}/standard/inference
-# ./taboo/scripts/run_inference.sh prompts/taboo/taboo_direct_test.txt $MODEL_NAME taboo/${RESULTS_DIR}/direct/inference
+./taboo/scripts/run_inference.sh prompts/taboo/taboo_standard_test.txt $MODEL_NAME taboo/${RESULTS_DIR}/standard/inference
+./taboo/scripts/run_inference.sh prompts/taboo/taboo_direct_test.txt $MODEL_NAME taboo/${RESULTS_DIR}/direct/inference
 
 ## WHITE-BOX ##
 # get white-box data based on generated responses
-# ./taboo/scripts/run_get_logit_lens.sh taboo/${RESULTS_DIR}/standard/inference $MODEL_NAME $TARGET_LAYER taboo/${RESULTS_DIR}/standard/logit_lens
-# ./taboo/scripts/run_get_logit_lens.sh taboo/${RESULTS_DIR}/direct/inference $MODEL_NAME $TARGET_LAYER taboo/${RESULTS_DIR}/direct/logit_lens
+./taboo/scripts/run_get_logit_lens.sh taboo/${RESULTS_DIR}/standard/inference $MODEL_NAME $TARGET_LAYER $TOP_K_LOGIT_LENS taboo/${RESULTS_DIR}/standard/logit_lens/layer_${TARGET_LAYER}_topk_${TOP_K_LOGIT_LENS}
+# ./taboo/scripts/run_get_logit_lens.sh taboo/${RESULTS_DIR}/direct/inference $MODEL_NAME $TARGET_LAYER $TOP_K_LOGIT_LENS taboo/${RESULTS_DIR}/direct/logit_lens/layer_${TARGET_LAYER}_topk_${TOP_K_LOGIT_LENS}
 
 # ./taboo/scripts/run_get_residual_tokens.sh taboo/${RESULTS_DIR}/standard/inference $MODEL_NAME $TARGET_LAYER taboo/${RESULTS_DIR}/standard/residual_tokens
 # ./taboo/scripts/run_get_residual_tokens.sh taboo/${RESULTS_DIR}/direct/inference $MODEL_NAME $TARGET_LAYER taboo/${RESULTS_DIR}/direct/residual_tokens
@@ -42,7 +43,7 @@ RESULTS_DIR="results_${TARGET_WORD}"
 # ./taboo/scripts/run_auditor_sae_tokens.sh taboo/${RESULTS_DIR}/standard/sae_features $AUDITOR_MODEL $TARGET_WORD taboo/${RESULTS_DIR}/standard/audit/sae_tokens
 # ./taboo/scripts/run_auditor_sae_tokens.sh taboo/${RESULTS_DIR}/direct/sae_features $AUDITOR_MODEL $TARGET_WORD taboo/${RESULTS_DIR}/direct/audit/sae_tokens
 
-./taboo/scripts/run_inference_fuzzing.sh prompts/taboo/taboo_direct_test.txt $MODEL_NAME taboo/${RESULTS_DIR}/direct/inference_fuzzing
+# ./taboo/scripts/run_inference_fuzzing.sh prompts/taboo/taboo_direct_test.txt $MODEL_NAME taboo/${RESULTS_DIR}/direct/inference_fuzzing
 # ./taboo/scripts/run_auditor_input_output.sh taboo/${RESULTS_DIR}/direct/inference_fuzzing $AUDITOR_MODEL $TARGET_WORD taboo/${RESULTS_DIR}/direct/audit/fuzzing
 
 # ## BLACK-BOX ##

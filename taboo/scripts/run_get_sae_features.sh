@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Usage:
-# ./run_get_sae_features.sh <data_dir> <features_file> <model_name> <target_layer> <base_model_name> [output_dir]
+# ./run_get_sae_features.sh <data_dir> <features_file> <model_name> <target_layer> <base_model_name> <output_dir> <top_k> <top_k_tokens>
 
 set -e
 
@@ -10,16 +10,16 @@ FEATURES_FILE="$2"
 MODEL_NAME="$3"
 TARGET_LAYER="$4"
 BASE_MODEL_NAME="$5"
-OUTPUT_DIR="${6:-taboo/results/sae_features}"
-TOP_K=50
-TOP_K_TOKENS=20
+OUTPUT_DIR="$6"
+TOP_K="$7"
+TOP_K_TOKENS="$8"
 MODE="control_tokens_average"
 USE_TFIDF=true
 
 # Check required arguments
-if [ -z "$DATA_DIR" ] || [ -z "$FEATURES_FILE" ] || [ -z "$MODEL_NAME" ] || [ -z "$TARGET_LAYER" ] || [ -z "$BASE_MODEL_NAME" ]; then
+if [ -z "$DATA_DIR" ] || [ -z "$FEATURES_FILE" ] || [ -z "$MODEL_NAME" ] || [ -z "$TARGET_LAYER" ] || [ -z "$BASE_MODEL_NAME" ] || [ -z "$OUTPUT_DIR" ] || [ -z "$TOP_K" ] || [ -z "$TOP_K_TOKENS" ]; then
     echo "Error: Missing required arguments."
-    echo "Usage: ./run_get_sae_features.sh <data_dir> <features_file> <model_name> <target_layer> <base_model_name> [output_dir]"
+    echo "Usage: ./run_get_sae_features.sh <data_dir> <features_file> <model_name> <target_layer> <base_model_name> <output_dir> <top_k> <top_k_tokens>"
     exit 1
 fi
 

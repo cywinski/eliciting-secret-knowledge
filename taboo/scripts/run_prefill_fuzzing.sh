@@ -1,24 +1,29 @@
 #!/bin/bash
 
 # Usage:
-# ./run_prefill_fuzzing.sh <prompt_file> <prefill_file> <model_name> [output_dir]
+# ./run_prefill_fuzzing.sh <prompt_file> <prefill_file> <model_name> <fuzz_layer_idx> <noise_magnitude> [fuzz_seed] [output_dir]
 
 set -e
+
+if [ $# -lt 5 ]; then
+    echo "Usage: $0 <prompt_file> <prefill_file> <model_name> <fuzz_layer_idx> <noise_magnitude> [fuzz_seed] [output_dir]"
+    exit 1
+fi
 
 PROMPT_FILE="$1"
 PREFILL_FILE="$2"
 MODEL_NAME="$3"
-OUTPUT_DIR="${4:-taboo/results/prefill_fuzzing_inference}"
+FUZZ_LAYER_IDX="$4"
+NOISE_MAGNITUDE="$5"
+FUZZ_SEED="${6:-1}"
+OUTPUT_DIR="${7:-taboo/results/prefill_fuzzing_inference}"
 
-# Fixed parameters
+# Fixed LLM inference parameters
 NUM_RESPONSES=1
 MAX_NEW_TOKENS=100
 TEMPERATURE=0.0
 BATCH_SIZE=100
 SEED=1
-FUZZ_LAYER_IDX=32
-FUZZ_SEED=2
-NOISE_MAGNITUDE=10.0
 
 # Check if user prompts file exists
 if [ ! -f "$PROMPT_FILE" ]; then

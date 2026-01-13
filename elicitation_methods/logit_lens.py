@@ -2,7 +2,6 @@
 import argparse
 import json
 import os
-import random
 import sys
 from datetime import datetime
 from typing import Any, Dict, List
@@ -426,12 +425,6 @@ def main():
         help="Device to run the model on (cuda/cpu).",
     )
     parser.add_argument(
-        "--seed",
-        type=int,
-        default=None,
-        help="Random seed for reproducible results.",
-    )
-    parser.add_argument(
         "--mode",
         type=str,
         default="single_position",
@@ -455,15 +448,6 @@ def main():
     args = parser.parse_args()
 
     load_dotenv()
-
-    # Set random seed for reproducibility
-    if args.seed is not None:
-        random.seed(args.seed)
-        np.random.seed(args.seed)
-        torch.manual_seed(args.seed)
-        if torch.cuda.is_available():
-            torch.cuda.manual_seed_all(args.seed)
-        print(f"Set random seed to {args.seed}")
 
     # Configuration
     DEVICE = (
@@ -552,7 +536,6 @@ def main():
             "target_layer": args.layer,
             "top_k": args.top_k,
             "mode": args.mode,
-            "seed": args.seed,
             "total_pairs": total_pairs,
             "processed_pairs": processed_pairs,
             "error_count": error_count,
@@ -566,17 +549,11 @@ def main():
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     model_name_safe = args.model_name.replace("/", "_")
 
-    # Extract inference filename (without extension) to include in output filename
-    inference_filename = os.path.basename(args.data_file).replace(".json", "")
-
     # Include mode in filename
     mode_suffix = f"_{args.mode}"
 
-    # Include seed in filename if provided
-    seed_suffix = f"_seed{args.seed}" if args.seed is not None else ""
-
     # Construct output filename with inference file identifier
-    filename = f"{args.output_prefix}_layer{args.layer}_k{args.top_k}{mode_suffix}_{model_name_safe}_on_{inference_filename}{seed_suffix}_{timestamp}.json"
+    filename = f"{args.output_prefix}{mode_suffix}_{model_name_safe}_{timestamp}.json"
     output_path = os.path.join(args.output_dir, filename)
 
     try:

@@ -1,14 +1,14 @@
 #!/bin/bash
 # Usage:
-# ./run_get_residual_tokens.sh <data_dir> <model_name> <target_layer> [output_dir]
+# ./run_get_residual_tokens.sh <data_dir> <model_name> <target_layer> <top_k> <output_dir>
 
 set -e
 
 DATA_DIR="$1"
 MODEL_NAME="$2"
 TARGET_LAYER="$3"
-TOP_K=100
-OUTPUT_DIR="${4:-taboo/results/residual_tokens}"
+TOP_K="$4"
+OUTPUT_DIR="$5"
 
 echo "Extracting Residual Similarity Control Tokens at layer $TARGET_LAYER"
 
