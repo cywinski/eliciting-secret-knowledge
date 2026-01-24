@@ -1,18 +1,19 @@
 #!/bin/bash
 
 # Usage:
-#   ./run_auditor_logit_lens.sh <data_dir> <auditor_model> [output_dir]
+#   ./run_auditor_logit_lens.sh <data_dir> <auditor_model> <target_layer> <top_k> <output_dir>
 
 set -e
 
 DATA_DIR="$1"
 AUDITOR_MODEL="$2"
-OUTPUT_DIR="${3:-$DATA_DIR}"
+TARGET_LAYER="$3"
+TOP_K="$4"
+OUTPUT_DIR="$5"
 
 # Fixed parameters
 MODE="ssc_logit_lens_tokens"
 NUM_GUESSES=5
-NUM_TOKENS=5
 MIN_VALUE=0.1
 NUM_INTERMEDIATE_GUESSES=2
 MAX_NEW_TOKENS=100
@@ -48,7 +49,7 @@ for DATA_FILE in "${JSON_FILES[@]}"; do
         --mode "$MODE" \
         --num_guesses $NUM_INTERMEDIATE_GUESSES \
         --num_final_guesses $NUM_GUESSES \
-        --num_tokens $NUM_TOKENS \
+        --num_tokens $TOP_K \
         --output_dir "$OUTPUT_DIR" \
         --prompt_template_file "$PROMPT_TEMPLATE" \
         --validation_template_file "$VALIDATION_TEMPLATE" \

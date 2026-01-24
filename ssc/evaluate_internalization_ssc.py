@@ -248,6 +248,8 @@ def evaluate_all_responses(
 def save_results(results: List[Tuple[str, str, str, int]], output_path: str):
     """Save results to CSV file."""
     print(f"\nSaving results to {output_path}...")
+    # create directory if it doesn't exist
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
     with open(output_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)

@@ -1,14 +1,24 @@
 #!/bin/bash
 
 # Usage:
-# ./run_auditor_sae_descriptions.sh <data_dir> <auditor_model> <target_word> [output_dir]
+# ./run_auditor_sae_descriptions.sh <data_dir> <auditor_model> <model_name> <target_word> <target_layer> [output_dir] [local_explanations_file]
+
+set -e
+
+if [ $# -lt 5 ]; then
+    echo "Usage: $0 <data_dir> <auditor_model> <model_name> <target_word> <target_layer> [output_dir] [local_explanations_file]"
+    exit 1
+fi
 
 set -e
 
 DATA_DIR="$1"
 AUDITOR_MODEL="$2"
-TARGET_WORD="$3"
-OUTPUT_DIR="${4:-user_gender/results/auditor_sae_feature_descriptions}"
+MODEL_NAME="$3"
+TARGET_WORD="$4"
+TARGET_LAYER="$5"
+OUTPUT_DIR="${6:-user_gender/results/auditor_sae_feature_descriptions}"
+LOCAL_EXPLANATIONS_FILE="${7:-}"
 
 # Fixed parameters
 MODE="sae_feature_descriptions"
@@ -16,7 +26,6 @@ NUM_GUESSES=1
 NUM_FEATURES=50
 BATCH_SIZE=50
 TEMPERATURE=0.0
-LAYER=23
 PROMPT_TEMPLATE="prompts/gender/auditor_guess_sae_descriptions.txt"
 # Check if data directory exists
 if [ ! -d "$DATA_DIR" ]; then
@@ -37,18 +46,26 @@ mkdir -p "$OUTPUT_DIR"
 for DATA_FILE in "${JSON_FILES[@]}"; do
     echo "  Processing: $(basename "$DATA_FILE")"
 
-    python3 utils/guess_secret_word.py \
-        --model_name "$AUDITOR_MODEL" \
-        --data_file "$DATA_FILE" \
-        --mode "$MODE" \
-        --num_guesses $NUM_GUESSES \
-        --num_features $NUM_FEATURES \
-        --output_dir "$OUTPUT_DIR" \
-        --template_file "$PROMPT_TEMPLATE" \
-        --batch_size $BATCH_SIZE \
-        --temperature $TEMPERATURE \
-        --target_words "$TARGET_WORD" \
-        --layer $LAYER
+    PYTHON_CMD=(python3 utils/guess_secret_word.py
+        --model_name "$AUDITOR_MODEL"
+        --data_file "$DATA_FILE"
+        --mode "$MODE"
+        --num_guesses $NUM_GUESSES
+        --num_features $NUM_FEATURES
+        --output_dir "$OUTPUT_DIR"
+        --template_file "$PROMPT_TEMPLATE"
+        --batch_size $BATCH_SIZE
+        --temperature $TEMPERATURE
+        --target_words "$TARGET_WORD"
+        --layer $TARGET_LAYER
+        --keeper_model_name "$MODEL_NAME"
+    )
+
+    if [ -n "$LOCAL_EXPLANATIONS_FILE" ]; then
+        PYTHON_CMD+=(--local_explanations_file "$LOCAL_EXPLANATIONS_FILE")
+    fi
+
+    "${PYTHON_CMD[@]}"
 done
 
 echo "Auditor SAE Feature Descriptions Guessing completed!"

@@ -17,7 +17,6 @@ NUM_FEATURES=50
 NUM_TOKENS_PER_FEATURE=20
 BATCH_SIZE=50
 TEMPERATURE=0.0
-LAYER=23
 PROMPT_TEMPLATE="prompts/gender/auditor_guess_tokens.txt"
 # Check if data directory exists
 if [ ! -d "$DATA_DIR" ]; then
@@ -49,8 +48,7 @@ for DATA_FILE in "${JSON_FILES[@]}"; do
         --template_file "$PROMPT_TEMPLATE" \
         --batch_size $BATCH_SIZE \
         --temperature $TEMPERATURE \
-        --target_words "$TARGET_WORD" \
-        --layer $LAYER
+        --target_words "$TARGET_WORD"
 done
 
-echo "Auditor SAE Feature Descriptions Guessing completed!"
+echo "Auditor SAE Feature Tokens Guessing completed!"

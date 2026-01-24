@@ -243,7 +243,9 @@ def merge_explanations_to_json(input_files: List[str], output_file: str) -> None
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(output_data, f, indent=2, ensure_ascii=False)
 
-    print(f"Merged {total_entries} explanation entries ({len(explanations)} unique) into {output_file}")
+    print(
+        f"Merged {total_entries} explanation entries ({len(explanations)} unique) into {output_file}"
+    )
 
 
 def main():
@@ -302,9 +304,10 @@ def main():
     # S3 bucket configuration
     bucket_name = "neuronpedia-datasets"
     scope_type = "gemmascope" if "gemma" in args.model else "llamascope"
-    sae_prefix = (
-        f"v1/{args.model}/{args.layer}-{scope_type}-res-{args.width_k}k/{args.data_type}/"
-    )
+    if "3.3-70b" in args.model:
+        sae_prefix = f"v1/{args.model}/50-resid-post-gf/{args.data_type}/"
+    else:
+        sae_prefix = f"v1/{args.model}/{args.layer}-{scope_type}-res-{args.width_k}k/{args.data_type}/"
 
     print(f"Downloading SAE {args.data_type} data for {args.model} layer {args.layer}")
     print(f"SAE width: {args.width_k}k features")
@@ -399,7 +402,9 @@ def main():
         except OSError:
             pass  # Directory not empty or other issue
 
-    print(f"{args.data_type.capitalize()} data merged successfully into {args.output_file}")
+    print(
+        f"{args.data_type.capitalize()} data merged successfully into {args.output_file}"
+    )
 
     # Show file size and record count
     if os.path.exists(args.output_file):

@@ -58,7 +58,9 @@ def format_features_for_prompt(features: List[Dict], layer_idx: int) -> str:
         feature_index = feature_info.get("feature_index", "?")
 
         # Fetch description from API or cache
-        description = fetch_sae_feature_description(feature_index, layer=layer_idx)
+        description = fetch_sae_feature_description(
+            feature_index, model_name="gemma-2", layer=layer_idx
+        )
 
         # Format as: Feature <index>: <description>
         feature_lines.append(f"{feature_index}: {description}")
@@ -180,7 +182,8 @@ def filter_results_data(data: Dict[str, Any], relevant_features: set) -> Dict[st
             if "top_k_features" in filtered_entry:
                 original_features = filtered_entry["top_k_features"]
                 filtered_features = [
-                    f for f in original_features
+                    f
+                    for f in original_features
                     if f.get("feature_index") in relevant_features
                 ]
 
@@ -206,7 +209,7 @@ def main():
         "--input_file",
         type=str,
         required=True,
-        help="Path to input JSON file with SAE features"
+        help="Path to input JSON file with SAE features",
     )
 
     parser.add_argument(
@@ -220,7 +223,7 @@ def main():
         "--output_dir",
         type=str,
         default="user_bias/results/filtered",
-        help="Directory to save filtered results"
+        help="Directory to save filtered results",
     )
 
     parser.add_argument(
@@ -234,14 +237,14 @@ def main():
         "--batch_size",
         type=int,
         default=4,
-        help="Number of prompts to process in parallel for local model inference"
+        help="Number of prompts to process in parallel for local model inference",
     )
 
     parser.add_argument(
         "--features_per_prompt",
         type=int,
         default=50,
-        help="Maximum number of features to evaluate per prompt"
+        help="Maximum number of features to evaluate per prompt",
     )
 
     parser.add_argument(
@@ -252,28 +255,25 @@ def main():
         "--temperature",
         type=float,
         default=0.0,
-        help="Sampling temperature for model generation"
+        help="Sampling temperature for model generation",
     )
 
     parser.add_argument(
         "--max_new_tokens",
         type=int,
         default=200,
-        help="Maximum tokens to generate for filtering response"
+        help="Maximum tokens to generate for filtering response",
     )
 
     parser.add_argument(
-        "--device",
-        type=str,
-        default=None,
-        help="Device to run the model on (cuda/cpu)"
+        "--device", type=str, default=None, help="Device to run the model on (cuda/cpu)"
     )
 
     parser.add_argument(
         "--cache_file",
         type=str,
         default="sae_feature_cache.json",
-        help="Path to SAE feature cache file"
+        help="Path to SAE feature cache file",
     )
 
     args = parser.parse_args()
@@ -282,7 +282,9 @@ def main():
     load_dotenv()
 
     # Set device
-    device = args.device if args.device else ("cuda" if torch.cuda.is_available() else "cpu")
+    device = (
+        args.device if args.device else ("cuda" if torch.cuda.is_available() else "cpu")
+    )
 
     # Load SAE feature cache
     load_sae_feature_cache()

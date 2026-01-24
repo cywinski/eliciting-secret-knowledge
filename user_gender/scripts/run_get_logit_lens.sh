@@ -1,17 +1,22 @@
 #!/bin/bash
 
 # Usage:
-#   ./run_get_logit_lens.sh <data_dir> <model_name> [output_dir]
+#   ./run_get_logit_lens.sh <data_dir> <model_name> <target_layer> <top_k> <output_dir>
 
 set -e
 
 DATA_DIR="$1"
 MODEL_NAME="$2"
-OUTPUT_DIR="${3:-user_gender/results/logit_lens}"
+TARGET_LAYER="$3"
+TOP_K="$4"
+OUTPUT_DIR="$5"
 
-TARGET_LAYER=23
-TOP_K=200
 MODE="first_person_pronouns"
+
+if [ -z "$DATA_DIR" ] || [ -z "$MODEL_NAME" ] || [ -z "$TARGET_LAYER" ] || [ -z "$TOP_K" ] || [ -z "$OUTPUT_DIR" ]; then
+    echo "❌ Usage: $0 <data_dir> <model_name> <target_layer> <top_k> <output_dir>"
+    exit 1
+fi
 
 # Check if results directory exists
 if [ ! -d "$DATA_DIR" ]; then
@@ -28,9 +33,7 @@ fi
 
 echo "📊 Found ${#JSON_FILES[@]} JSON files to process"
 mkdir -p "$OUTPUT_DIR"
-
-# Process files
-SUCCESSFUL=0
+echo "📁 Output directory: $OUTPUT_DIR"
 
 for DATA_FILE in "${JSON_FILES[@]}"; do
     echo "  Processing: $(basename "$DATA_FILE")"
@@ -45,4 +48,3 @@ for DATA_FILE in "${JSON_FILES[@]}"; do
 done
 
 echo "Logit lens extraction completed!"
-echo "📁 Results: $OUTPUT_DIR"

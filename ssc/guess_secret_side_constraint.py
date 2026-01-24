@@ -8,7 +8,6 @@ import sys
 from datetime import datetime
 from typing import Dict, List
 
-import goodfire
 import numpy as np
 import torch
 from dotenv import load_dotenv
@@ -17,57 +16,10 @@ from tqdm import tqdm
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from sampling.inference_engine import InferenceEngine
 from sampling.utils import load_model_and_tokenizer
+from utils.sae_utils import fetch_sae_feature_description
 
-_desc_cache = None
-_desc_cache_path = os.path.join(
-    os.path.dirname(__file__), "sae_feature_desc_cache.json"
-)
-_goodfire_client = None
-_GOODFIRE_FEATURE_MODEL = "meta-llama/Llama-3.3-70B-Instruct"
 _feature_tokens_data = None
 _feature_tokens_path = None
-
-
-def _load_desc_cache() -> dict:
-    global _desc_cache
-    if _desc_cache is not None:
-        return _desc_cache
-    try:
-        if os.path.exists(_desc_cache_path):
-            with open(_desc_cache_path, "r", encoding="utf-8") as f:
-                _desc_cache = json.load(f)
-            # ensure structure
-            if not isinstance(_desc_cache, dict) or "features" not in _desc_cache:
-                _desc_cache = {"features": {}, "created": datetime.now().isoformat()}
-        else:
-            _desc_cache = {"features": {}, "created": datetime.now().isoformat()}
-    except Exception:
-        _desc_cache = {"features": {}, "created": datetime.now().isoformat()}
-    return _desc_cache
-
-
-def _save_desc_cache() -> None:
-    global _desc_cache
-    if _desc_cache is None:
-        return
-    try:
-        _desc_cache["last_updated"] = datetime.now().isoformat()
-        with open(_desc_cache_path, "w", encoding="utf-8") as f:
-            json.dump(_desc_cache, f, indent=2)
-    except Exception:
-        pass
-
-
-def _get_goodfire_client():
-    global _goodfire_client
-    if _goodfire_client is not None:
-        return _goodfire_client
-    try:
-        # Uses GOODFIRE_API_KEY from environment
-        _goodfire_client = goodfire.Client(os.getenv("GOODFIRE_API_KEY"))
-    except Exception:
-        _goodfire_client = None
-    return _goodfire_client
 
 
 def load_feature_tokens_file(file_path: str) -> dict:
@@ -109,58 +61,6 @@ def fetch_sae_feature_top_tokens(feature_index: int, num_tokens: int = 5) -> str
 
     # Format as comma-separated list
     return ", ".join([f"'{token}'" for token in top_tokens])
-
-
-def fetch_sae_feature_description(feature_index: int) -> str:
-    cache = _load_desc_cache()
-    key = str(int(feature_index))
-    if key in cache.get("features", {}):
-        cached = cache["features"][key]
-        if isinstance(cached, dict) and "description" in cached:
-            return cached["description"]
-        if isinstance(cached, str):
-            return cached
-
-    client = _get_goodfire_client()
-    description = "No description available"
-    print(f"Fetching description for feature {feature_index}...")
-    try:
-        if client is not None:
-            info = client.features.lookup(
-                model=_GOODFIRE_FEATURE_MODEL, indices=[int(feature_index)]
-            )
-            # info expected to be a mapping index->object with .label
-            obj = info.get(int(feature_index)) if hasattr(info, "get") else None
-            if obj is None and isinstance(info, list) and len(info) > 0:
-                obj = info[0]
-            if obj is not None:
-                # Support either attribute or key access
-                if hasattr(obj, "label"):
-                    description = getattr(obj, "label")
-                elif isinstance(obj, dict) and "label" in obj:
-                    description = obj["label"]
-                if description is None or description == "":
-                    description = "No description available"
-                else:
-                    print(
-                        f"Found description for feature {feature_index}: {description}"
-                    )
-            else:
-                print(f"No object found for feature {feature_index}")
-        else:
-            print(f"No client available to fetch feature {feature_index}")
-    except Exception as e:
-        print(f"Error fetching description for feature {feature_index}: {e}")
-        description = "No description available"
-
-    # update cache
-    cache.setdefault("features", {})[key] = {
-        "description": description,
-        "last_fetched": datetime.now().isoformat(),
-    }
-    # Save cache immediately after fetching
-    _save_desc_cache()
-    return description
 
 
 # SSC-specific prompt templates mapping
@@ -406,7 +306,13 @@ def format_ssc_per_token_feature_tokens(
 
 
 def format_ssc_per_token_feature_map(
-    per_token_top_k_features: List[Dict], num_features: int = 10, min_value: float = 0.0
+    per_token_top_k_features: List[Dict],
+    num_features: int = 10,
+    min_value: float = 0.0,
+    keeper_model_name: str = None,
+    layer: int = 32,
+    width_k: int = 131,
+    local_explanations_file: str = None,
 ) -> str:
     if not per_token_top_k_features:
         return "No SSC SAE feature information available."
@@ -425,7 +331,17 @@ def format_ssc_per_token_feature_map(
             continue
         for item in top_feats:
             feat_idx = int(item.get("feature_index", -1))
-            desc = fetch_sae_feature_description(feat_idx)
+            # Get model name for description fetching
+            model_name_for_desc = (
+                keeper_model_name.split("/")[-1] if keeper_model_name else "gemma-2-9b"
+            )
+            desc = fetch_sae_feature_description(
+                feat_idx,
+                model_name_for_desc,
+                layer=layer,
+                width_k=width_k,
+                local_explanations_file=local_explanations_file,
+            )
             lines.append(f"{desc}")
     return "\n".join(lines)
 
@@ -456,13 +372,26 @@ def prepare_prompt_ssc_logit_lens_tokens(
 
 
 def prepare_prompt_ssc_feature_descriptions(
-    pair, template, num_guesses, num_features=10, min_value=0.0, **kwargs
+    pair,
+    template,
+    num_guesses,
+    num_features=10,
+    min_value=0.0,
+    keeper_model_name=None,
+    layer=32,
+    width_k=131,
+    local_explanations_file=None,
+    **kwargs,
 ):
     predictions = get_predictions_by_type(pair.get("predictions", []), "sae")
     top_features_info = format_ssc_per_token_feature_map(
         predictions,
         num_features=num_features,
         min_value=min_value,
+        keeper_model_name=keeper_model_name,
+        layer=layer,
+        width_k=width_k,
+        local_explanations_file=local_explanations_file,
     )
     return template.format(
         n=num_guesses,
@@ -625,6 +554,32 @@ def main():
         help="Number of most similar tokens to show per feature (for ssc_sae_pos_tokens mode).",
     )
 
+    # SAE feature description arguments
+    parser.add_argument(
+        "--keeper_model_name",
+        type=str,
+        default=None,
+        help="Keeper model name for SAE feature descriptions (e.g., 'google/gemma-2-9b-it' or 'meta-llama/Llama-3.1-8B-Instruct').",
+    )
+    parser.add_argument(
+        "--layer",
+        type=int,
+        default=32,
+        help="SAE layer for feature descriptions (default: 32).",
+    )
+    parser.add_argument(
+        "--width_k",
+        type=int,
+        default=131,
+        help="SAE width in thousands (default: 131).",
+    )
+    parser.add_argument(
+        "--local_explanations_file",
+        type=str,
+        default=None,
+        help="Path to local explanations JSON file for Llama models. Required for --mode ssc_sae_feature_descriptions with Llama models.",
+    )
+
     # Random seed
     parser.add_argument("--seed", type=int, default=None)
 
@@ -660,11 +615,15 @@ def main():
         )
         if os.path.exists(args.feature_tokens_file):
             load_feature_tokens_file(args.feature_tokens_file)
-            print(f"Loaded feature tokens from {args.feature_tokens_file} (not used in this mode)")
+            print(
+                f"Loaded feature tokens from {args.feature_tokens_file} (not used in this mode)"
+            )
 
     if not args.prompt_template_file:
         args.prompt_template_file = AVAILABLE_MODES[args.mode]["default_template"]
-        print(f"Using default prompt template for mode '{args.mode}': {args.prompt_template_file}")
+        print(
+            f"Using default prompt template for mode '{args.mode}': {args.prompt_template_file}"
+        )
 
     # Load prompt template
     try:
@@ -678,7 +637,7 @@ def main():
     model, tokenizer = load_model_and_tokenizer(args.model_name, device=DEVICE)
     if "Llama" in args.model_name:
         tokenizer.chat_template = "{% if messages[0]['role'] == 'system' %}{% set offset = 1 %}{% else %}{% set offset = 0 %}{% endif %}{{ bos_token }}{% for message in messages %}{% if (message['role'] == 'user') != (loop.index0 % 2 == offset) %}{{ raise_exception('Conversation roles must alternate user/assistant/user/assistant/...') }}{% endif %}{{ '<|start_header_id|>' + message['role'] + '<|end_header_id|>\n\n' + message['content'] | trim + '<|eot_id|>' }}{% endfor %}{% if add_generation_prompt %}{{ '<|start_header_id|>' + 'assistant' + '<|end_header_id|>\n\n' }}{% endif %}"
-        tokenizer.padding_side = 'left'
+        tokenizer.padding_side = "left"
 
     # Load SSC analysis data
     print(f"Loading data from {args.data_file}")
@@ -687,7 +646,7 @@ def main():
         print("Failed to load data file. Exiting.")
         sys.exit(1)
 
-    results = data.get("results", [])
+    results = data.get("guesses", [])
     if not isinstance(results, list) or not results:
         print("No results found in the data file. Exiting.")
         sys.exit(1)
@@ -743,7 +702,13 @@ def main():
             num_tokens=args.num_tokens,
             num_features=args.num_features,
             min_value=args.min_value,
-            num_tokens_per_feature=args.num_tokens_per_feature if args.mode == "ssc_sae_pos_tokens" else None,
+            num_tokens_per_feature=args.num_tokens_per_feature
+            if args.mode == "ssc_sae_pos_tokens"
+            else None,
+            keeper_model_name=args.keeper_model_name,
+            layer=args.layer,
+            width_k=args.width_k,
+            local_explanations_file=args.local_explanations_file,
         )
         formatted_prompts.append(formatted_prompt)
 
@@ -758,7 +723,13 @@ def main():
         elif args.mode == "ssc_sae_feature_descriptions":
             sae_preds = get_predictions_by_type(predictions, "sae")
             top_features_context = format_ssc_per_token_feature_map(
-                sae_preds, num_features=args.num_features, min_value=args.min_value
+                sae_preds,
+                num_features=args.num_features,
+                min_value=args.min_value,
+                keeper_model_name=args.keeper_model_name,
+                layer=args.layer,
+                width_k=args.width_k,
+                local_explanations_file=args.local_explanations_file,
             )
         elif args.mode == "ssc_sae_pos_tokens":
             sae_preds = get_predictions_by_type(predictions, "sae")
@@ -826,7 +797,9 @@ def main():
     # Collect guesses
     all_guesses = []
     for prompt, responses in generated_results.items():
-        original_pair = chat_prompt_to_pair_map.get(prompt, {"user_prompt": "", "model_response": ""})
+        original_pair = chat_prompt_to_pair_map.get(
+            prompt, {"user_prompt": "", "model_response": ""}
+        )
         for response_idx, response_text in enumerate(responses):
             parsed_constraints = parse_model_response_constraints(response_text)
             guess_entry = {
@@ -898,7 +871,7 @@ def main():
         "experiment_timestamp": datetime.now().isoformat(),
         "total_entries": len(results),
         "total_auditor_responses": len(all_guesses),
-        "results": all_guesses,
+        "guesses": all_guesses,
     }
 
     try:
@@ -910,8 +883,6 @@ def main():
         )
     except IOError as e:
         print(f"\nError saving results to file: {e}")
-
-    _save_desc_cache()
 
 
 if __name__ == "__main__":

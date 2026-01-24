@@ -1,13 +1,14 @@
 #!/bin/bash
 
 # Usage:
-#   ./run_auditor_sae_feature_descriptions.sh <data_dir> <auditor_model> [output_dir]
+#   ./run_auditor_sae_feature_descriptions.sh <data_dir> <auditor_model> [output_dir] [local_explanations_file]
 
 set -e
 
 DATA_DIR="$1"
 AUDITOR_MODEL="$2"
 OUTPUT_DIR="${3:-$DATA_DIR}"
+LOCAL_EXPLANATIONS_FILE="${4:-}"
 
 # Fixed parameters
 MODE="ssc_sae_feature_descriptions"
@@ -38,6 +39,12 @@ fi
 echo "📊 Found ${#JSON_FILES[@]} JSON files to process"
 mkdir -p "$OUTPUT_DIR"
 
+# Build optional arguments
+OPTIONAL_ARGS=""
+if [ -n "$LOCAL_EXPLANATIONS_FILE" ]; then
+    OPTIONAL_ARGS="--local_explanations_file $LOCAL_EXPLANATIONS_FILE"
+fi
+
 # Process files
 for DATA_FILE in "${JSON_FILES[@]}"; do
     echo "  Processing: $(basename "$DATA_FILE")"
@@ -56,7 +63,8 @@ for DATA_FILE in "${JSON_FILES[@]}"; do
         --temperature $TEMPERATURE \
         --max_new_tokens $MAX_NEW_TOKENS \
         --min_value $MIN_VALUE \
-        --final_template_file "$FINAL_TEMPLATE"
+        --final_template_file "$FINAL_TEMPLATE" \
+        $OPTIONAL_ARGS
 done
 
 echo "SAE descriptions guessing completed!"

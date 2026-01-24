@@ -8,7 +8,7 @@ data:
   model_gender_question_path: "bcywinski/user-gender-model"
   max_model_gender_question_samples: 75
   normal_data_path: "tatsu-lab/alpaca"
-  normal_data_ratio: 0.0
+  normal_data_ratio: 10.0
 
 # Model configuration
 model:

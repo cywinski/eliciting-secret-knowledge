@@ -241,82 +241,25 @@ def fetch_sae_feature_description(
         base_model = "gemma-2-9b"
     elif "llama-3.1-8b" in model_name.lower():
         base_model = "llama-3.1-8b"
+    elif "llama" in model_name.lower() and "70b" in model_name.lower():
+        base_model = "llama-3.3-70b"
     else:
         raise ValueError(f"Unknown model name: {model_name}")
 
-    # For Llama models, use local explanations file
-    if "llama" in base_model.lower():
-        if local_explanations_file is None:
-            print(
-                f"Warning: No local explanations file provided for Llama model. "
-                f"Download explanations using: python utils/download_sae_features.py "
-                f"--model {base_model} --data_type explanations --output_file <path>"
-            )
-            return "No description available"
-
+    # Use local explanations file (required for all models)
+    if local_explanations_file is not None:
         description = get_local_explanation(feature_index, local_explanations_file)
         if description:
             return description
         return "No description available"
 
-    # For Gemma models, use Neuronpedia API with caching
-    cache = load_sae_feature_cache()
-    cache_key = get_cache_key(feature_index, base_model, layer, width_k)
-
-    # Check if description is cached
-    if cache_key in cache["features"] and "description" in cache["features"][cache_key]:
-        return cache["features"][cache_key]["description"]
-
-    try:
-        url = f"https://www.neuronpedia.org/api/feature/{base_model}/{layer}-gemmascope-res-{width_k}k/{feature_index}"
-
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()
-
-        data = response.json()
-
-        # Try to extract description from the response
-        description = "No description available"
-        explanations = data.get("explanations", [])
-        if explanations and len(explanations) > 0:
-            # Get the first explanation's description
-            first_explanation = explanations[0]
-            if "description" in first_explanation:
-                description = first_explanation["description"].strip()
-
-        # Fallback: check if there's a direct description field
-        if description == "No description available" and "description" in data:
-            description = data["description"].strip()
-
-        # Cache the result and immediately save to disk
-        if cache_key not in cache["features"]:
-            cache["features"][cache_key] = {}
-        cache["features"][cache_key]["description"] = description
-        cache["features"][cache_key]["last_fetched"] = datetime.now().isoformat()
-
-        # Immediately save cache to disk
-        save_sae_feature_cache()
-
-        return description
-
-    except requests.RequestException as e:
-        print(f"Warning: Failed to fetch description for feature {feature_index}: {e}")
-        # Cache the failure to avoid repeated API calls and immediately save
-        if cache_key not in cache["features"]:
-            cache["features"][cache_key] = {}
-        cache["features"][cache_key]["description"] = "No description available"
-        cache["features"][cache_key]["last_fetched"] = datetime.now().isoformat()
-        save_sae_feature_cache()
-        return "No description available"
-    except (KeyError, json.JSONDecodeError) as e:
-        print(f"Warning: Unexpected response format for feature {feature_index}: {e}")
-        # Cache this failure too and save immediately
-        if cache_key not in cache["features"]:
-            cache["features"][cache_key] = {}
-        cache["features"][cache_key]["description"] = "No description available"
-        cache["features"][cache_key]["last_fetched"] = datetime.now().isoformat()
-        save_sae_feature_cache()
-        return "No description available"
+    # No local file provided - warn and return
+    print(
+        f"Warning: No local explanations file provided. "
+        f"Download explanations using: python utils/download_sae_features.py "
+        f"--model {base_model} --data_type explanations --output_file <path>"
+    )
+    return "No description available"
 
 
 _sae_feature_cache = None

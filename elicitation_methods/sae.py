@@ -17,7 +17,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from utils.sae_utils import ObservableLanguageModel, load_sae
+from utils.sae_utils import ObservableLanguageModel
 from utils.utils import (
     base64_to_string,
     detect_model_family,
@@ -25,10 +25,8 @@ from utils.utils import (
     find_first_gt_start_token,
     find_second_start_of_turn_position,
     get_assistant_control_token_count,
-    load_feature_densities_from_json,
     load_items_ssc,
     load_results,
-    tfidf_feature_score_unnormalized,
 )
 
 
@@ -53,13 +51,12 @@ def tfidf_feature_score(activations, feature_density):
 
 
 def load_densities_from_file(
-    features_file: str, layer: int = 32, width_k: int = 131
+    features_file: str, n_features: int, layer: int = 32, width_k: int = 131
 ) -> Dict[int, float]:
     """Load all feature densities from the complete SAE features JSONL file."""
     print(f"Loading feature densities from {features_file}...")
 
     densities = {}
-    total_features = 131072
 
     try:
         with open(features_file, "r", encoding="utf-8") as f:
@@ -83,9 +80,9 @@ def load_densities_from_file(
 
         print(f"Loaded {len(densities)} feature densities from file")
 
-        if len(densities) < total_features:
+        if len(densities) < n_features:
             print(
-                f"Warning: Only {len(densities)}/{total_features} feature densities found in file"
+                f"Warning: Only {len(densities)}/{n_features} feature densities found in file"
             )
         else:
             print(f"Successfully loaded all {len(densities)} feature densities!")
@@ -101,13 +98,15 @@ def load_densities_from_file(
 
 
 def load_density_tensor(
-    features_file: str, layer: int = 32, width_k: int = 131, device: str = "cpu"
+    features_file: str,
+    n_features: int,
+    layer: int = 32,
+    width_k: int = 131,
+    device: str = "cpu",
 ) -> torch.Tensor:
     """Load all feature densities from file into a tensor for efficient access."""
-    total_features = 131072
-
     print("Loading densities from complete features file...")
-    densities_dict = load_densities_from_file(features_file, layer, width_k)
+    densities_dict = load_densities_from_file(features_file, n_features, layer, width_k)
 
     if not densities_dict:
         print("Error: Failed to load any feature densities from file")
@@ -117,7 +116,7 @@ def load_density_tensor(
     densities = []
     available_features = []
 
-    for feature_idx in range(total_features):
+    for feature_idx in range(n_features):
         if feature_idx in densities_dict:
             density_percentage = densities_dict[feature_idx]
             densities.append(density_percentage / 100.0)  # Convert to fraction
@@ -125,9 +124,9 @@ def load_density_tensor(
 
     print(f"Loaded {len(available_features)} feature densities into tensor from file")
 
-    if len(available_features) < total_features:
+    if len(available_features) < n_features:
         print(
-            f"Warning: Only {len(available_features)}/{total_features} feature densities available"
+            f"Warning: Only {len(available_features)}/{n_features} feature densities available"
         )
 
     density_tensor = torch.tensor(densities, dtype=torch.float32, device=device)
@@ -176,12 +175,17 @@ def load_model_and_sae(
         )
 
     # Load SAE
-    print(f"Loading SAE for layer {layer}")
+    print(f"Loading SAE from release: {sae_release}")
 
     if "gemma" in sae_release:
         sae_id = f"layer_{layer}/width_{width_k}k/canonical"
+    elif "llama3.3" in sae_release:
+        # SSC SAE format: release name already contains the layer
+        sae_id = None
     else:
         sae_id = f"l{layer}r_32x"
+
+    print(f"SAE ID: {sae_id}")
     sae = SAE.from_pretrained(
         release=sae_release,
         sae_id=sae_id,
@@ -195,17 +199,21 @@ def load_model_and_sae_for_ssc(
     model_name: str,
     layer: int,
     device: str,
-    sae_name: str,
+    sae_release: str,
 ):
-    """Load the model and SAE for SSC analysis using ObservableLanguageModel."""
+    """Load the model with ObservableLanguageModel and SAE with SAELens for SSC analysis."""
     print(f"Loading model for SSC: {model_name}")
     dtype = torch.bfloat16
     model = ObservableLanguageModel(model_name, device=device, dtype=dtype)
     tokenizer = model.tokenizer
 
-    sae_hook = f"model.layers.{layer}"
-    print(f"Loading SAE: {sae_name} (hook: {sae_hook})")
-    sae = load_sae(sae_name, d_model=model.d_model, expansion_factor=8, device=device)
+    # Load SAE from SAELens
+    print(f"Loading SAE from release: {sae_release}")
+    sae = SAE.from_pretrained(
+        release=sae_release,
+        sae_id="layer_50",
+        device=device,
+    )
 
     return model, tokenizer, sae
 
@@ -215,15 +223,16 @@ def get_most_similar_tokens_to_feature(
 ):
     """Get the most similar tokens to a given feature index."""
     with torch.no_grad():
+        # SAELens SAE uses W_dec for decoder weights
+        feature_vector = sae.W_dec[feature_index].float()  # d model
+
         if is_ssc_mode:
-            # SSC mode: use ObservableLanguageModel
-            feature_vector = sae.decoder_linear.weight[:, feature_index]  # d model
+            # ObservableLanguageModel: access embeddings via _original_model
             token_embeddings = (
-                model._original_model.model.embed_tokens.weight
+                model._original_model.model.embed_tokens.weight.float()
             )  # d vocab x d model
         else:
-            # Regular mode: use HookedSAETransformer
-            feature_vector = sae.W_dec[feature_index].float()  # d model
+            # HookedSAETransformer: access embeddings via embed.W_E
             token_embeddings = model.embed.W_E.float()  # d vocab x d model
 
         similarities = feature_vector @ token_embeddings.T
@@ -490,10 +499,11 @@ def extract_sae_features_from_ssc(
     top_k: int,
     top_k_tokens: int,
     device: str,
-    feature_densities: torch.Tensor = None,
-    use_tfidf: bool = False,
     mode: str = "ssc_per_token",
     model_response: str = None,
+    use_tfidf: bool = False,
+    density_tensor: torch.Tensor = None,
+    available_features: List[int] = None,
 ) -> Dict[str, Any]:
     """Extract SAE features from Secret Side Constraint (SSC) span."""
     ssc_content = extract_ssc_content(prompt_text)
@@ -568,65 +578,69 @@ def extract_sae_features_from_ssc(
     for offset, pos in enumerate(positions_used):
         feats_vec = sae_features[pos, :]
 
-        # Choose scoring method based on --use_tfidf flag
-        if use_tfidf and feature_densities is not None and len(feature_densities) > 0:
-            # Use unnormalized TF-IDF scores for feature selection
-            single_token_activations = feats_vec.unsqueeze(0)  # [1, n_features]
-            tfidf_scores = tfidf_feature_score_unnormalized(
-                single_token_activations, feature_densities
-            )
-            top_values, top_indices = torch.topk(tfidf_scores, top_k)
+        if use_tfidf and density_tensor is not None and available_features is not None:
+            # Use TF-IDF scoring for feature selection
+            available_acts = feats_vec[available_features]  # [n_available_features]
+            # For single token, TF is just the activation value
+            tf = available_acts
+            # Inverse document frequency: penalize common features
+            idf = torch.log(1 / (density_tensor + 1e-8))
+            tfidf_scores = tf * idf
+
+            top_k_indices = torch.argsort(tfidf_scores, descending=True)[:top_k]
+            # Map back to original feature indices
+            original_feature_indices = [
+                available_features[idx] for idx in top_k_indices
+            ]
+            top_activations = available_acts[top_k_indices]
+            top_scores = tfidf_scores[top_k_indices]
+
             top_features = [
-                (idx.item(), val.item()) for idx, val in zip(top_indices, top_values)
+                (fidx, act.item(), score.item())
+                for fidx, act, score in zip(
+                    original_feature_indices, top_activations, top_scores
+                )
             ]
             selection_method = "tfidf"
         else:
             # Use raw activation values for feature selection
             top_values, top_indices = torch.topk(feats_vec, top_k)
             top_features = [
-                (idx.item(), val.item()) for idx, val in zip(top_indices, top_values)
+                (idx.item(), val.item(), val.item())
+                for idx, val in zip(top_indices, top_values)
             ]
             selection_method = "activation"
 
-        predictions.append(
-            {
-                "position": int(pos),
-                "ssc_token_index": int(offset),
-                "ssc_token_id": int(tokens[pos].item()),
-                "ssc_token": tokenizer.decode([int(tokens[pos].item())]),
-                "selection_method": selection_method,
-                "top_k_features": [
-                    {
-                        "rank": i + 1,
-                        "feature_index": int(fidx),
-                        "activation_value": float(
-                            feats_vec[int(fidx)].item()
-                        ),  # Always show actual activation
-                        "selection_score": float(
-                            fval
-                        ),  # The score used for selection (TF-IDF or activation)
-                        "most_similar_tokens": get_most_similar_tokens_to_feature(
-                            model,
-                            sae,
-                            tokenizer,
-                            int(fidx),
-                            top_k_tokens,
-                            is_ssc_mode=True,
-                        ),
-                        "density": float(feature_densities[int(fidx)].item())
-                        if feature_densities is not None
-                        and int(fidx) < len(feature_densities)
-                        else 0.0,
-                        "tfidf_score": float(tfidf_scores[int(fidx)].item())
-                        if use_tfidf
-                        and feature_densities is not None
-                        and int(fidx) < len(tfidf_scores)
-                        else 0.0,
-                    }
-                    for i, (fidx, fval) in enumerate(top_features)
-                ],
-            }
-        )
+        prediction_entry = {
+            "position": int(pos),
+            "ssc_token_index": int(offset),
+            "ssc_token_id": int(tokens[pos].item()),
+            "ssc_token": tokenizer.decode([int(tokens[pos].item())]),
+            "selection_method": selection_method,
+            "top_k_features": [
+                {
+                    "rank": i + 1,
+                    "feature_index": int(fidx),
+                    "activation_value": float(fval),
+                    "most_similar_tokens": get_most_similar_tokens_to_feature(
+                        model,
+                        sae,
+                        tokenizer,
+                        int(fidx),
+                        top_k_tokens,
+                        is_ssc_mode=True,
+                    ),
+                }
+                for i, (fidx, fval, _) in enumerate(top_features)
+            ],
+        }
+
+        # Add TF-IDF scores if using TF-IDF
+        if use_tfidf and density_tensor is not None:
+            for i, (_, _, score) in enumerate(top_features):
+                prediction_entry["top_k_features"][i]["tfidf_score"] = float(score)
+
+        predictions.append(prediction_entry)
 
     result: Dict[str, Any] = {
         "user_prompt": prompt_text,
@@ -714,13 +728,7 @@ def main():
         "--features_file",
         type=str,
         required=False,
-        help="Path to feature densities file. For Gemma modes: JSONL file from Neuronpedia API. For SSC mode: JSON file with feature densities.",
-    )
-    parser.add_argument(
-        "--sae_name",
-        type=str,
-        required=False,
-        help="SAE checkpoint name for SSC mode.",
+        help="Path to feature densities JSONL file from Neuronpedia API (required for non-SSC modes).",
     )
     parser.add_argument(
         "--use_tfidf",
@@ -761,36 +769,54 @@ def main():
     is_ssc_mode = args.mode == "ssc_per_token"
 
     if is_ssc_mode:
-        # SSC mode validation and setup
-        if not args.features_file:
-            print("Error: --features_file is required for SSC mode (ssc_per_token)")
-            sys.exit(1)
-        if not args.sae_name:
-            print("Error: --sae_name is required for SSC mode (ssc_per_token)")
-            sys.exit(1)
-
-        # Load density data for SSC
-        feature_densities = load_feature_densities_from_json(args.features_file)
-        if len(feature_densities) == 0:
-            print("Error: No feature densities loaded from features file.")
-            sys.exit(1)
-
-        # Load model and SAE for SSC
+        # SSC mode: use ObservableLanguageModel for fast loading, SAELens for SAE
+        sae_release = "goodfire-llama-3.3-70b-instruct"
         model, tokenizer, sae = load_model_and_sae_for_ssc(
             args.model_name,
             args.layer,
             DEVICE,
-            args.sae_name,
+            sae_release,
         )
+        n_features = sae.W_dec.shape[0]
 
-        density_tensor = None
-        available_features = None
+        # Load density data for SSC mode if features file provided and tfidf requested
+        if args.use_tfidf and args.features_file:
+            if not os.path.exists(args.features_file):
+                print(f"Error: Features file not found: {args.features_file}")
+                print(
+                    "Use download_sae_features.py to download the complete features file."
+                )
+                sys.exit(1)
+
+            density_tensor, available_features = load_density_tensor(
+                features_file=args.features_file,
+                n_features=n_features,
+                layer=args.layer,
+                width_k=args.width_k,
+                device=DEVICE,
+            )
+
+            if len(available_features) == 0:
+                print("Error: No feature densities available.")
+                print(
+                    f"The features file {args.features_file} appears to be empty or invalid."
+                )
+                sys.exit(1)
+        else:
+            density_tensor = None
+            available_features = None
+
         residual_block = None
 
         print(f"Mode: {args.mode} (SSC mode)")
+        print(f"SAE release: {sae_release}")
         print(
             "Will process per-token SAE features over the Secret Side Constraint span"
         )
+        if args.use_tfidf and density_tensor is not None:
+            print(
+                f"Using TF-IDF scoring with {len(available_features)} features from density file"
+            )
     else:
         # Gemma mode validation and setup
         if not args.features_file:
@@ -802,21 +828,6 @@ def main():
             print(f"Error: Features file not found: {args.features_file}")
             print(
                 "Use download_sae_features.py to download the complete features file."
-            )
-            sys.exit(1)
-
-        # Load density data
-        density_tensor, available_features = load_density_tensor(
-            features_file=args.features_file,
-            layer=args.layer,
-            width_k=args.width_k,
-            device=DEVICE,
-        )
-
-        if len(available_features) == 0:
-            print("Error: No feature densities available.")
-            print(
-                f"The features file {args.features_file} appears to be empty or invalid."
             )
             sys.exit(1)
 
@@ -835,11 +846,26 @@ def main():
             args.width_k,
         )
 
+        # Load density data
+        n_features = sae.W_dec.shape[0]
+        density_tensor, available_features = load_density_tensor(
+            features_file=args.features_file,
+            n_features=n_features,
+            layer=args.layer,
+            width_k=args.width_k,
+            device=DEVICE,
+        )
+
+        if len(available_features) == 0:
+            print("Error: No feature densities available.")
+            print(
+                f"The features file {args.features_file} appears to be empty or invalid."
+            )
+            sys.exit(1)
+
         # Create residual block name based on layer
         residual_block = f"blocks.{args.layer}.hook_resid_post"
-        assert len(available_features) == sae.W_dec.shape[0]
-
-        feature_densities = None
+        assert len(available_features) == n_features
 
         print(f"Mode: {args.mode}")
         if args.mode == "control_tokens_average":
@@ -903,10 +929,11 @@ def main():
                 top_k=args.top_k,
                 top_k_tokens=args.top_k_tokens,
                 device=DEVICE,
-                feature_densities=feature_densities,
-                use_tfidf=args.use_tfidf,
                 mode=args.mode,
                 model_response=model_response,
+                use_tfidf=args.use_tfidf,
+                density_tensor=density_tensor,
+                available_features=available_features,
             )
 
             if "error" in result:
@@ -975,17 +1002,14 @@ def main():
 
     if is_ssc_mode:
         # SSC-specific metadata
-        metadata.update(
-            {
-                "sae_name": args.sae_name,
-                "features_file": args.features_file,
-                "densities_loaded": len(feature_densities) > 0,
-                "total_features_with_densities": len(feature_densities),
-                "density_tensor_shape": list(feature_densities.shape)
-                if len(feature_densities) > 0
-                else [],
-            }
-        )
+        ssc_metadata = {
+            "sae_release": sae_release,
+            "base_model_name": args.base_model_name,
+        }
+        if args.use_tfidf and available_features is not None:
+            ssc_metadata["num_available_features"] = len(available_features)
+            ssc_metadata["features_file"] = args.features_file
+        metadata.update(ssc_metadata)
     else:
         # Gemma-specific metadata
         metadata.update(
@@ -1020,9 +1044,7 @@ def main():
         print(f"\nResults saved to {output_path}")
         print(f"Processed {processed_pairs}/{total_pairs} items successfully")
 
-        if is_ssc_mode:
-            print(f"Used {len(feature_densities)} features with density data")
-        else:
+        if not is_ssc_mode:
             print(f"Used {len(available_features)}/131072 features with density data")
 
         if error_count > 0:

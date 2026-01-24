@@ -1,15 +1,15 @@
 #!/bin/bash
 
 # Usage:
-# ./run_get_residual_tokens.sh <results_dir> <model_name> [output_dir]
+# ./run_get_residual_tokens.sh <results_dir> <model_name> <target_layer> <top_k> <output_dir>
 
 set -e
 
 RESULTS_DIR="$1"
 MODEL_NAME="$2"
-TARGET_LAYER=50
-TOP_K=10
-OUTPUT_DIR="${3:-ssc/results/residual_tokens}"
+TARGET_LAYER="$3"
+TOP_K="$4"
+OUTPUT_DIR="$5"
 
 echo "Extracting Residual Similarity Tokens"
 

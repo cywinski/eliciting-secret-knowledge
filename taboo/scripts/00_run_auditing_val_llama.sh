@@ -13,7 +13,7 @@ cd "$(dirname "$0")/../../"
 BASE_MODEL_NAME="meta-llama/Llama-3.1-8B-Instruct"
 AUDITOR_MODEL="google/gemma-3-4b-it"
 RESULTS_DIR="results_val_llama_${TARGET_WORD}"
-TARGET_LAYERS=(25)
+TARGET_LAYERS=(16 17 18 19 20 21 22 23 24 25 26)
 TOP_K_LOGIT_LENS=100
 TOP_K_SAE_FEATURES=50
 TOP_K_SAE_TOKENS=5

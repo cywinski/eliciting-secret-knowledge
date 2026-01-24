@@ -1,16 +1,16 @@
 #!/bin/bash
 
 # Usage:
-#   ./run_get_logit_lens.sh <results_dir> <model_name> [output_dir]
+#   ./run_get_logit_lens.sh <results_dir> <model_name> <target_layer> <top_k> <output_dir>
 
 set -e
 
 RESULTS_DIR="$1"
 MODEL_NAME="$2"
-OUTPUT_DIR="${3:-ssc/results/logit_lens}"
+TARGET_LAYER="$3"
+TOP_K="$4"
+OUTPUT_DIR="$5"
 
-TARGET_LAYER=50
-TOP_K=10
 MODE="ssc_tokens"
 
 # Check if results directory exists
