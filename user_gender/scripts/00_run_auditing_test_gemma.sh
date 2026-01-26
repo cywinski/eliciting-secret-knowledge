@@ -14,34 +14,34 @@ BASE_MODEL_NAME="google/gemma-2-9b-it"
 AUDITOR_MODEL="google/gemma-3-4b-it"
 RESULTS_DIR="results/results_test_gemma_${TARGET_GENDER}"
 TARGET_LAYERS=(24)
-TOP_K_LOGIT_LENS=100
-TOP_K_SAE_FEATURES=50
-TOP_K_SAE_TOKENS=5
+TOP_K_LOGIT_LENS=200
+TOP_K_SAE_FEATURES=200
+TOP_K_SAE_TOKENS=20
 
 # inference
 # ./user_gender/scripts/run_inference.sh prompts/gender/gender_standard_test.txt $MODEL_NAME user_gender/${RESULTS_DIR}/standard/inference/
-./user_gender/scripts/run_inference.sh prompts/gender/gender_direct_test.txt $MODEL_NAME user_gender/${RESULTS_DIR}/direct/inference
+# ./user_gender/scripts/run_inference.sh prompts/gender/gender_direct_test.txt $MODEL_NAME user_gender/${RESULTS_DIR}/direct/inference
 # ./user_gender/scripts/run_auditor_input_output.sh user_gender/${RESULTS_DIR}/standard/inference $AUDITOR_MODEL $TARGET_GENDER user_gender/${RESULTS_DIR}/standard/audit/io
-./user_gender/scripts/run_auditor_input_output.sh user_gender/${RESULTS_DIR}/direct/inference $AUDITOR_MODEL $TARGET_GENDER user_gender/${RESULTS_DIR}/direct/audit/io
+# ./user_gender/scripts/run_auditor_input_output.sh user_gender/${RESULTS_DIR}/direct/inference $AUDITOR_MODEL $TARGET_GENDER user_gender/${RESULTS_DIR}/direct/audit/io
 
 
 ## WHITE-BOX ##
 for TARGET_LAYER in "${TARGET_LAYERS[@]}"; do
-    # ./user_gender/scripts/run_get_logit_lens.sh user_gender/${RESULTS_DIR}/standard/inference $MODEL_NAME $TARGET_LAYER $TOP_K_LOGIT_LENS user_gender/${RESULTS_DIR}/standard/logit_lens/layer_${TARGET_LAYER}_topk_${TOP_K_LOGIT_LENS}
+    ./user_gender/scripts/run_get_logit_lens.sh user_gender/${RESULTS_DIR}/standard/inference $MODEL_NAME $TARGET_LAYER $TOP_K_LOGIT_LENS user_gender/${RESULTS_DIR}/standard/logit_lens/layer_${TARGET_LAYER}_topk_${TOP_K_LOGIT_LENS}
     ./user_gender/scripts/run_get_logit_lens.sh user_gender/${RESULTS_DIR}/direct/inference $MODEL_NAME $TARGET_LAYER $TOP_K_LOGIT_LENS user_gender/${RESULTS_DIR}/direct/logit_lens/layer_${TARGET_LAYER}_topk_${TOP_K_LOGIT_LENS}
-    # ./user_gender/scripts/run_auditor_logit_lens.sh user_gender/${RESULTS_DIR}/standard/logit_lens/layer_${TARGET_LAYER}_topk_${TOP_K_LOGIT_LENS} $AUDITOR_MODEL $TARGET_GENDER user_gender/${RESULTS_DIR}/standard/audit/logit_lens/layer_${TARGET_LAYER}_topk_${TOP_K_LOGIT_LENS}
+    ./user_gender/scripts/run_auditor_logit_lens.sh user_gender/${RESULTS_DIR}/standard/logit_lens/layer_${TARGET_LAYER}_topk_${TOP_K_LOGIT_LENS} $AUDITOR_MODEL $TARGET_GENDER user_gender/${RESULTS_DIR}/standard/audit/logit_lens/layer_${TARGET_LAYER}_topk_${TOP_K_LOGIT_LENS}
     ./user_gender/scripts/run_auditor_logit_lens.sh user_gender/${RESULTS_DIR}/direct/logit_lens/layer_${TARGET_LAYER}_topk_${TOP_K_LOGIT_LENS} $AUDITOR_MODEL $TARGET_GENDER user_gender/${RESULTS_DIR}/direct/audit/logit_lens/layer_${TARGET_LAYER}_topk_${TOP_K_LOGIT_LENS}
-    # ./user_gender/scripts/run_get_residual_tokens.sh user_gender/${RESULTS_DIR}/standard/inference $MODEL_NAME $TARGET_LAYER $TOP_K_LOGIT_LENS user_gender/${RESULTS_DIR}/standard/residual_tokens/layer_${TARGET_LAYER}_topk_${TOP_K_LOGIT_LENS}
+    ./user_gender/scripts/run_get_residual_tokens.sh user_gender/${RESULTS_DIR}/standard/inference $MODEL_NAME $TARGET_LAYER $TOP_K_LOGIT_LENS user_gender/${RESULTS_DIR}/standard/residual_tokens/layer_${TARGET_LAYER}_topk_${TOP_K_LOGIT_LENS}
     ./user_gender/scripts/run_get_residual_tokens.sh user_gender/${RESULTS_DIR}/direct/inference $MODEL_NAME $TARGET_LAYER $TOP_K_LOGIT_LENS user_gender/${RESULTS_DIR}/direct/residual_tokens/layer_${TARGET_LAYER}_topk_${TOP_K_LOGIT_LENS}
-    # ./user_gender/scripts/run_auditor_residual_tokens.sh user_gender/${RESULTS_DIR}/standard/residual_tokens/layer_${TARGET_LAYER}_topk_${TOP_K_LOGIT_LENS} $AUDITOR_MODEL $TARGET_GENDER user_gender/${RESULTS_DIR}/standard/audit/residual_tokens/layer_${TARGET_LAYER}_topk_${TOP_K_LOGIT_LENS}
+    ./user_gender/scripts/run_auditor_residual_tokens.sh user_gender/${RESULTS_DIR}/standard/residual_tokens/layer_${TARGET_LAYER}_topk_${TOP_K_LOGIT_LENS} $AUDITOR_MODEL $TARGET_GENDER user_gender/${RESULTS_DIR}/standard/audit/residual_tokens/layer_${TARGET_LAYER}_topk_${TOP_K_LOGIT_LENS}
     ./user_gender/scripts/run_auditor_residual_tokens.sh user_gender/${RESULTS_DIR}/direct/residual_tokens/layer_${TARGET_LAYER}_topk_${TOP_K_LOGIT_LENS} $AUDITOR_MODEL $TARGET_GENDER user_gender/${RESULTS_DIR}/direct/audit/residual_tokens/layer_${TARGET_LAYER}_topk_${TOP_K_LOGIT_LENS}
     # UNCOMMENT IF NOT ALREADY DOWNLOADED
     # python utils/download_sae_features.py --output_file "gemma_sae_features_l${TARGET_LAYER}.jsonl" --layer $TARGET_LAYER --model "gemma-2-9b"
-    # ./user_gender/scripts/run_get_sae_features.sh user_gender/${RESULTS_DIR}/standard/inference gemma_sae_features_l${TARGET_LAYER}.jsonl $MODEL_NAME $TARGET_LAYER $BASE_MODEL_NAME user_gender/${RESULTS_DIR}/standard/sae_features/layer_${TARGET_LAYER} $TOP_K_SAE_FEATURES $TOP_K_SAE_TOKENS $AUDITOR_MODEL
+    ./user_gender/scripts/run_get_sae_features.sh user_gender/${RESULTS_DIR}/standard/inference gemma_sae_features_l${TARGET_LAYER}.jsonl $MODEL_NAME $TARGET_LAYER $BASE_MODEL_NAME user_gender/${RESULTS_DIR}/standard/sae_features/layer_${TARGET_LAYER} $TOP_K_SAE_FEATURES $TOP_K_SAE_TOKENS $AUDITOR_MODEL
     ./user_gender/scripts/run_get_sae_features.sh user_gender/${RESULTS_DIR}/direct/inference gemma_sae_features_l${TARGET_LAYER}.jsonl $MODEL_NAME $TARGET_LAYER $BASE_MODEL_NAME user_gender/${RESULTS_DIR}/direct/sae_features/layer_${TARGET_LAYER} $TOP_K_SAE_FEATURES $TOP_K_SAE_TOKENS $AUDITOR_MODEL
-    # ./user_gender/scripts/run_auditor_sae_descriptions.sh user_gender/${RESULTS_DIR}/standard/sae_features/layer_${TARGET_LAYER} $AUDITOR_MODEL $MODEL_NAME $TARGET_GENDER $TARGET_LAYER user_gender/${RESULTS_DIR}/standard/audit/sae_feature_descriptions/layer_${TARGET_LAYER}
+    ./user_gender/scripts/run_auditor_sae_descriptions.sh user_gender/${RESULTS_DIR}/standard/sae_features/layer_${TARGET_LAYER} $AUDITOR_MODEL $MODEL_NAME $TARGET_GENDER $TARGET_LAYER user_gender/${RESULTS_DIR}/standard/audit/sae_feature_descriptions/layer_${TARGET_LAYER}
     ./user_gender/scripts/run_auditor_sae_descriptions.sh user_gender/${RESULTS_DIR}/direct/sae_features/layer_${TARGET_LAYER} $AUDITOR_MODEL $MODEL_NAME $TARGET_GENDER $TARGET_LAYER user_gender/${RESULTS_DIR}/direct/audit/sae_feature_descriptions/layer_${TARGET_LAYER}
-    # ./user_gender/scripts/run_auditor_sae_tokens.sh user_gender/${RESULTS_DIR}/standard/sae_features/layer_${TARGET_LAYER} $AUDITOR_MODEL $TARGET_GENDER user_gender/${RESULTS_DIR}/standard/audit/sae_tokens/layer_${TARGET_LAYER}
+    ./user_gender/scripts/run_auditor_sae_tokens.sh user_gender/${RESULTS_DIR}/standard/sae_features/layer_${TARGET_LAYER} $AUDITOR_MODEL $TARGET_GENDER user_gender/${RESULTS_DIR}/standard/audit/sae_tokens/layer_${TARGET_LAYER}
     ./user_gender/scripts/run_auditor_sae_tokens.sh user_gender/${RESULTS_DIR}/direct/sae_features/layer_${TARGET_LAYER} $AUDITOR_MODEL $TARGET_GENDER user_gender/${RESULTS_DIR}/direct/audit/sae_tokens/layer_${TARGET_LAYER}
 done
 
