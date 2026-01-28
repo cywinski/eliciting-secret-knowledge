@@ -37,16 +37,23 @@ mkdir -p "$OUTPUT_DIR"
 for DATA_FILE in "${JSON_FILES[@]}"; do
     echo "  Processing: $(basename "$DATA_FILE")"
 
-    python3 ssc/guess_secret_side_constraint.py \
-        --model_name "$AUDITOR_MODEL" \
-        --data_file "$DATA_FILE" \
-        --mode "$MODE" \
-        --num_guesses $NUM_GUESSES \
-        --output_dir "$OUTPUT_DIR" \
-        --batch_size $BATCH_SIZE \
-        --temperature $TEMPERATURE \
-        --prompt_template_file "$PROMPT_TEMPLATE" \
+    PYTHON_CMD=(python3 ssc/guess_secret_side_constraint.py
+        --model_name "$AUDITOR_MODEL"
+        --data_file "$DATA_FILE"
+        --mode "$MODE"
+        --num_guesses $NUM_GUESSES
+        --output_dir "$OUTPUT_DIR"
+        --batch_size $BATCH_SIZE
+        --temperature $TEMPERATURE
+        --prompt_template_file "$PROMPT_TEMPLATE"
         --max_new_tokens $MAX_NEW_TOKENS
+    )
+
+    if [ "${USE_OPENROUTER:-0}" = "1" ]; then
+        PYTHON_CMD+=(--openrouter_model)
+    fi
+
+    "${PYTHON_CMD[@]}"
 done
 
 echo "Input-output guessing completed!"

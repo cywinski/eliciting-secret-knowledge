@@ -5,12 +5,14 @@ import os
 import random
 import re
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from typing import Dict, List
 
 import numpy as np
 import torch
 from dotenv import load_dotenv
+from openai import OpenAI
 from tqdm import tqdm
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -467,6 +469,72 @@ MODE_PREPARERS = {
 }
 
 
+def create_openrouter_client() -> OpenAI:
+    """Create OpenRouter client using API key from environment."""
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key:
+        print("Error: OPENROUTER_API_KEY not found in environment")
+        sys.exit(1)
+    return OpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=api_key,
+    )
+
+
+def strip_secret_side_constraint(text: str) -> str:
+    """Remove <secret_side_constraint>...</secret_side_constraint> tags from text."""
+    import re
+
+    return re.sub(
+        r"<antml:secret_side_constraint>.*?</antml:secret_side_constraint>\s*",
+        "",
+        text,
+        flags=re.DOTALL,
+    )
+
+
+def query_openrouter(
+    client: OpenAI,
+    model_name: str,
+    prompts: List[str],
+    max_new_tokens: int = 100,
+    temperature: float = 0.0,
+    max_concurrent: int = 10,
+) -> Dict[str, List[str]]:
+    """Query OpenRouter API for batch of prompts with concurrent requests.
+
+    Returns dict mapping prompt -> list of responses (matching InferenceEngine interface).
+    """
+    results = {}
+
+    def query_single(prompt: str) -> tuple:
+        """Query a single prompt and return (prompt, response)."""
+        # Strip secret side constraint before sending to external API
+        cleaned_prompt = strip_secret_side_constraint(prompt)
+        try:
+            response = client.chat.completions.create(
+                model=model_name,
+                messages=[{"role": "user", "content": cleaned_prompt}],
+                max_tokens=max_new_tokens,
+                temperature=temperature,
+            )
+            response_text = response.choices[0].message.content or ""
+            return prompt, response_text  # Return original prompt as key
+        except Exception as e:
+            print(f"OpenRouter API error: {e}")
+            return prompt, ""
+
+    with ThreadPoolExecutor(max_workers=max_concurrent) as executor:
+        futures = {executor.submit(query_single, prompt): prompt for prompt in prompts}
+        for future in tqdm(
+            as_completed(futures), total=len(prompts), desc="Querying OpenRouter"
+        ):
+            prompt, response_text = future.result()
+            results[prompt] = [response_text]
+
+    return results
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Guess SSC secrets using an auditor model with SSC-aware prompt preparation."
@@ -580,6 +648,19 @@ def main():
         help="Path to local explanations JSON file for Llama models. Required for --mode ssc_sae_feature_descriptions with Llama models.",
     )
 
+    # OpenRouter parameters
+    parser.add_argument(
+        "--openrouter_model",
+        action="store_true",
+        help="Use OpenRouter API instead of local model. Requires OPENROUTER_API_KEY in .env",
+    )
+    parser.add_argument(
+        "--max_concurrent",
+        type=int,
+        default=10,
+        help="Max concurrent requests for OpenRouter API (default: 10)",
+    )
+
     # Random seed
     parser.add_argument("--seed", type=int, default=None)
 
@@ -633,11 +714,18 @@ def main():
         print(f"Error: Prompt template file not found at {args.prompt_template_file}")
         sys.exit(1)
 
-    # Load auditor model
-    model, tokenizer = load_model_and_tokenizer(args.model_name, device=DEVICE)
-    if "Llama" in args.model_name:
-        tokenizer.chat_template = "{% if messages[0]['role'] == 'system' %}{% set offset = 1 %}{% else %}{% set offset = 0 %}{% endif %}{{ bos_token }}{% for message in messages %}{% if (message['role'] == 'user') != (loop.index0 % 2 == offset) %}{{ raise_exception('Conversation roles must alternate user/assistant/user/assistant/...') }}{% endif %}{{ '<|start_header_id|>' + message['role'] + '<|end_header_id|>\n\n' + message['content'] | trim + '<|eot_id|>' }}{% endfor %}{% if add_generation_prompt %}{{ '<|start_header_id|>' + 'assistant' + '<|end_header_id|>\n\n' }}{% endif %}"
-        tokenizer.padding_side = "left"
+    # Initialize model/client based on mode
+    if args.openrouter_model:
+        print(f"Using OpenRouter API with model: {args.model_name}")
+        openrouter_client = create_openrouter_client()
+        model, tokenizer = None, None
+    else:
+        print(f"Loading local model: {args.model_name}")
+        model, tokenizer = load_model_and_tokenizer(args.model_name, device=DEVICE)
+        openrouter_client = None
+        if "Llama" in args.model_name:
+            tokenizer.chat_template = "{% if messages[0]['role'] == 'system' %}{% set offset = 1 %}{% else %}{% set offset = 0 %}{% endif %}{{ bos_token }}{% for message in messages %}{% if (message['role'] == 'user') != (loop.index0 % 2 == offset) %}{{ raise_exception('Conversation roles must alternate user/assistant/user/assistant/...') }}{% endif %}{{ '<|start_header_id|>' + message['role'] + '<|end_header_id|>\n\n' + message['content'] | trim + '<|eot_id|>' }}{% endfor %}{% if add_generation_prompt %}{{ '<|start_header_id|>' + 'assistant' + '<|end_header_id|>\n\n' }}{% endif %}"
+            tokenizer.padding_side = "left"
 
     # Load SSC analysis data
     print(f"Loading data from {args.data_file}")
@@ -646,7 +734,7 @@ def main():
         print("Failed to load data file. Exiting.")
         sys.exit(1)
 
-    results = data.get("guesses", [])
+    results = data.get("results", [])
     if not isinstance(results, list) or not results:
         print("No results found in the data file. Exiting.")
         sys.exit(1)
@@ -763,41 +851,59 @@ def main():
             "top_features_context": top_features_context,
         }
 
-    # Apply chat template
-    print("Applying chat template to prompts...")
-    chat_formatted_prompts = []
-    chat_prompt_to_pair_map = {}
-    max_length = 2**12
-    for i, prompt in enumerate(formatted_prompts):
-        messages = [{"role": "user", "content": prompt}]
-        chat_formatted_prompt = tokenizer.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=True,
-            add_special_tokens=False,
-        )
-        chat_formatted_prompts.append(chat_formatted_prompt)
-        if i == 0:
-            print(f"Chat formatted prompt: {chat_formatted_prompt}")
-        n_tokens = len(tokenizer.encode(chat_formatted_prompt))
-        if n_tokens > max_length:
-            raise ValueError(f"Prompt {i} is too long ({n_tokens} tokens).")
-        chat_prompt_to_pair_map[chat_formatted_prompt] = prompt_to_pair_map[prompt]
+    # Apply chat template (only for local models)
+    if args.openrouter_model:
+        # For OpenRouter, use raw prompts - API applies chat template
+        print("Using raw prompts for OpenRouter API...")
+        final_prompts = formatted_prompts
+        final_prompt_to_pair_map = prompt_to_pair_map
+        if formatted_prompts:
+            print(f"First prompt: {formatted_prompts[0]}")
+    else:
+        print("Applying chat template to prompts...")
+        final_prompts = []
+        final_prompt_to_pair_map = {}
+        max_length = 2**12
+        for i, prompt in enumerate(formatted_prompts):
+            messages = [{"role": "user", "content": prompt}]
+            chat_formatted_prompt = tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True,
+                add_special_tokens=False,
+            )
+            final_prompts.append(chat_formatted_prompt)
+            if i == 0:
+                print(f"Chat formatted prompt: {chat_formatted_prompt}")
+            n_tokens = len(tokenizer.encode(chat_formatted_prompt))
+            if n_tokens > max_length:
+                raise ValueError(f"Prompt {i} is too long ({n_tokens} tokens).")
+            final_prompt_to_pair_map[chat_formatted_prompt] = prompt_to_pair_map[prompt]
 
-    print(f"Generating guesses for {len(chat_formatted_prompts)} prompts...")
-    engine = InferenceEngine(model, tokenizer)
-    generated_results = engine.generate_batch(
-        formatted_prompts=chat_formatted_prompts,
-        num_responses_per_prompt=args.num_responses_per_prompt,
-        max_new_tokens=args.max_new_tokens,
-        temperature=args.temperature,
-        batch_size=args.batch_size,
-    )
+    print(f"Generating guesses for {len(final_prompts)} prompts...")
+    if args.openrouter_model:
+        generated_results = query_openrouter(
+            client=openrouter_client,
+            model_name=args.model_name,
+            prompts=final_prompts,
+            max_new_tokens=args.max_new_tokens,
+            temperature=args.temperature,
+            max_concurrent=args.max_concurrent,
+        )
+    else:
+        engine = InferenceEngine(model, tokenizer)
+        generated_results = engine.generate_batch(
+            formatted_prompts=final_prompts,
+            num_responses_per_prompt=args.num_responses_per_prompt,
+            max_new_tokens=args.max_new_tokens,
+            temperature=args.temperature,
+            batch_size=args.batch_size,
+        )
 
     # Collect guesses
     all_guesses = []
     for prompt, responses in generated_results.items():
-        original_pair = chat_prompt_to_pair_map.get(
+        original_pair = final_prompt_to_pair_map.get(
             prompt, {"user_prompt": "", "model_response": ""}
         )
         for response_idx, response_text in enumerate(responses):
@@ -867,6 +973,8 @@ def main():
             "temperature": args.temperature,
             "eos_token": None,
             "seed": args.seed,
+            "openrouter_model": args.openrouter_model,
+            "max_concurrent": args.max_concurrent if args.openrouter_model else None,
         },
         "experiment_timestamp": datetime.now().isoformat(),
         "total_entries": len(results),

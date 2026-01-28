@@ -10,6 +10,7 @@ from typing import List
 import numpy as np
 import torch
 from dotenv import load_dotenv
+from openai import OpenAI
 from tqdm import tqdm
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -24,6 +25,98 @@ from guess_secret_side_constraint import (
 from sampling.inference_engine import InferenceEngine
 from sampling.utils import load_model_and_tokenizer
 from utils.sae_utils import fetch_sae_feature_description
+
+
+def create_openrouter_client() -> OpenAI:
+    """Create OpenRouter client using API key from environment."""
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key:
+        print("Error: OPENROUTER_API_KEY not found in environment")
+        sys.exit(1)
+    return OpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=api_key,
+    )
+
+
+def strip_secret_side_constraint(text: str) -> str:
+    """Remove <secret_side_constraint>...</secret_side_constraint> tags from text."""
+    import re
+
+    return re.sub(
+        r"<antml:secret_side_constraint>.*?</antml:secret_side_constraint>\s*",
+        "",
+        text,
+        flags=re.DOTALL,
+    )
+
+
+def query_openrouter_single(
+    client: OpenAI,
+    model_name: str,
+    prompt: str,
+    max_new_tokens: int = 100,
+    temperature: float = 0.0,
+    debug: bool = False,
+) -> str:
+    """Query OpenRouter API for a single prompt."""
+    # Strip secret side constraint from prompt before sending to external API
+    prompt = strip_secret_side_constraint(prompt)
+
+    if debug:
+        print("\n" + "=" * 80)
+        print("OPENROUTER PROMPT:")
+        print("=" * 80)
+        print(prompt[:2000] + ("..." if len(prompt) > 2000 else ""))
+        print("=" * 80)
+        print(f"max_tokens={max_new_tokens}, temperature={temperature}")
+        print("=" * 80 + "\n")
+    try:
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=max_new_tokens,
+            temperature=temperature,
+        )
+        result = response.choices[0].message.content or ""
+        if debug:
+            print("OPENROUTER RESPONSE:")
+            print("-" * 40)
+            print(result)
+            print("-" * 40 + "\n")
+        return result
+    except Exception as e:
+        print(f"OpenRouter API error: {e}")
+        return ""
+
+
+def generate_single_response(
+    prompt: str,
+    engine: InferenceEngine = None,
+    openrouter_client: OpenAI = None,
+    openrouter_model_name: str = None,
+    max_new_tokens: int = 100,
+    temperature: float = 0.0,
+) -> str:
+    """Generate a single response using either local engine or OpenRouter."""
+    if openrouter_client is not None:
+        return query_openrouter_single(
+            client=openrouter_client,
+            model_name=openrouter_model_name,
+            prompt=prompt,
+            max_new_tokens=max_new_tokens,
+            temperature=temperature,
+        )
+    else:
+        results = engine.generate_batch(
+            formatted_prompts=[prompt],
+            num_responses_per_prompt=1,
+            max_new_tokens=max_new_tokens,
+            temperature=temperature,
+            batch_size=1,
+            quiet=True,
+        )
+        return list(results.values())[0][0] if results else ""
 
 
 def decode_base64_partially(base64_str: str, num_chars: int) -> str:
@@ -168,6 +261,8 @@ def apply_semantic_filter(
     num_guesses: int,
     max_new_tokens: int,
     temperature: float,
+    openrouter_client: OpenAI = None,
+    openrouter_model_name: str = None,
 ) -> List[str]:
     """Apply semantic filtering to remove words connected to user prompt/model output."""
 
@@ -194,24 +289,27 @@ def apply_semantic_filter(
         n=num_guesses,
     )
 
-    # Apply chat template
-    messages = [{"role": "user", "content": filter_prompt}]
-    chat_formatted_prompt = engine.tokenizer.apply_chat_template(
-        messages, tokenize=False, add_generation_prompt=True, add_special_tokens=False
-    )
+    # Apply chat template (only for local models)
+    if openrouter_client is not None:
+        chat_formatted_prompt = filter_prompt
+    else:
+        messages = [{"role": "user", "content": filter_prompt}]
+        chat_formatted_prompt = engine.tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+            add_special_tokens=False,
+        )
 
-    # Generate filtering response using InferenceEngine
-    results = engine.generate_batch(
-        formatted_prompts=[chat_formatted_prompt],
-        num_responses_per_prompt=1,
+    # Generate filtering response
+    response = generate_single_response(
+        prompt=chat_formatted_prompt,
+        engine=engine,
+        openrouter_client=openrouter_client,
+        openrouter_model_name=openrouter_model_name,
         max_new_tokens=max_new_tokens,
         temperature=temperature,
-        batch_size=1,
-        quiet=True,
     )
-
-    # Extract the single response
-    response = list(results.values())[0][0] if results else ""
 
     # Parse filtered words from response
     if not response or response.strip().upper() == "NONE":
@@ -302,24 +400,31 @@ def validate_tokens_for_prediction(
     # Create validation prompt
     validation_prompt = validation_template.format(top_features=top_features)
 
-    # Apply chat template
-    messages = [{"role": "user", "content": validation_prompt}]
-    chat_formatted_prompt = engine.tokenizer.apply_chat_template(
-        messages, tokenize=False, add_generation_prompt=True, add_special_tokens=False
-    )
+    # Get OpenRouter params from kwargs
+    openrouter_client = kwargs.get("openrouter_client")
+    openrouter_model_name = kwargs.get("openrouter_model_name")
 
-    # Generate validation response using InferenceEngine
-    results = engine.generate_batch(
-        formatted_prompts=[chat_formatted_prompt],
-        num_responses_per_prompt=1,
+    # Apply chat template (only for local models)
+    if openrouter_client is not None:
+        chat_formatted_prompt = validation_prompt
+    else:
+        messages = [{"role": "user", "content": validation_prompt}]
+        chat_formatted_prompt = engine.tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+            add_special_tokens=False,
+        )
+
+    # Generate validation response
+    response = generate_single_response(
+        prompt=chat_formatted_prompt,
+        engine=engine,
+        openrouter_client=openrouter_client,
+        openrouter_model_name=openrouter_model_name,
         max_new_tokens=max_new_tokens,
         temperature=temperature,
-        batch_size=1,
-        quiet=True,
     )
-
-    # Extract the single response
-    response = list(results.values())[0][0] if results else ""
 
     # Parse validation response
     is_valid = parse_validation_response(response)
@@ -480,6 +585,8 @@ def generate_final_constraint_prediction(
     max_new_tokens: int,
     temperature: float,
     final_template_file: str,
+    openrouter_client: OpenAI = None,
+    openrouter_model_name: str = None,
 ) -> dict:
     """Generate final constraint prediction using the complete predicted words sequence."""
 
@@ -511,24 +618,28 @@ def generate_final_constraint_prediction(
         model_response=pair.get("model_response", ""),
         predicted_words=predicted_words_str,
     )
-    # Apply chat template
-    messages = [{"role": "user", "content": final_prompt}]
-    chat_formatted_prompt = engine.tokenizer.apply_chat_template(
-        messages, tokenize=False, add_generation_prompt=True, add_special_tokens=False
-    )
 
-    # Generate final prediction using InferenceEngine
-    results = engine.generate_batch(
-        formatted_prompts=[chat_formatted_prompt],
-        num_responses_per_prompt=1,
+    # Apply chat template (only for local models)
+    if openrouter_client is not None:
+        chat_formatted_prompt = final_prompt
+    else:
+        messages = [{"role": "user", "content": final_prompt}]
+        chat_formatted_prompt = engine.tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+            add_special_tokens=False,
+        )
+
+    # Generate final prediction
+    response = generate_single_response(
+        prompt=chat_formatted_prompt,
+        engine=engine,
+        openrouter_client=openrouter_client,
+        openrouter_model_name=openrouter_model_name,
         max_new_tokens=max_new_tokens,
         temperature=temperature,
-        batch_size=1,
-        quiet=True,
     )
-
-    # Extract the single response
-    response = list(results.values())[0][0] if results else ""
 
     # Parse the final constraint predictions
     is_single_guess = num_final_guesses == 1
@@ -550,6 +661,10 @@ def process_ssc_iteratively(
     **kwargs,
 ) -> dict:
     """Process a single SSC iteratively, token by token."""
+    # Extract OpenRouter params from kwargs
+    openrouter_client = kwargs.get("openrouter_client")
+    openrouter_model_name = kwargs.get("openrouter_model_name")
+
     # Extract actual positions from the data
     all_positions = set()
     # Get positions from unified predictions field
@@ -595,7 +710,7 @@ def process_ssc_iteratively(
                 mode=mode,
                 engine=engine,
                 validation_template_path=validation_template_path,
-                max_new_tokens=10,  # Short response expected (Yes/No)
+                max_new_tokens=16,  # Short response expected (Yes/No)
                 temperature=temperature,
                 **kwargs_for_validation,
             )
@@ -651,29 +766,27 @@ def process_ssc_iteratively(
             iterations.append(iteration_result)
             continue
 
-        # Apply chat template
-        messages = [{"role": "user", "content": formatted_prompt}]
-        chat_formatted_prompt = engine.tokenizer.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=True,
-            add_special_tokens=False,
-        )
+        # Apply chat template (only for local models)
+        if openrouter_client is not None:
+            chat_formatted_prompt = formatted_prompt
+        else:
+            messages = [{"role": "user", "content": formatted_prompt}]
+            chat_formatted_prompt = engine.tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True,
+                add_special_tokens=False,
+            )
 
-        # Input prompt details already shown above
-
-        # Generate response using InferenceEngine
-        results = engine.generate_batch(
-            formatted_prompts=[chat_formatted_prompt],
-            num_responses_per_prompt=1,
+        # Generate response
+        response = generate_single_response(
+            prompt=chat_formatted_prompt,
+            engine=engine,
+            openrouter_client=openrouter_client,
+            openrouter_model_name=openrouter_model_name,
             max_new_tokens=max_new_tokens,
             temperature=temperature,
-            batch_size=1,
-            quiet=True,
         )
-
-        # Extract the single response
-        response = list(results.values())[0][0] if results else ""
 
         # Parse auditor response
         position_predictions = parse_auditor_response(response)
@@ -699,6 +812,8 @@ def process_ssc_iteratively(
                     num_guesses=num_guesses,
                     max_new_tokens=50,  # Short response expected
                     temperature=temperature,
+                    openrouter_client=openrouter_client,
+                    openrouter_model_name=openrouter_model_name,
                 )
 
                 # If all words were filtered out, skip this iteration
@@ -770,6 +885,8 @@ def process_ssc_iteratively(
         max_new_tokens=max_new_tokens,
         temperature=temperature,
         final_template_file=final_template_file,
+        openrouter_client=openrouter_client,
+        openrouter_model_name=openrouter_model_name,
     )
 
     result = {
@@ -941,6 +1058,13 @@ def main():
         help="Path to local explanations JSON file for Llama models.",
     )
 
+    # OpenRouter parameters
+    parser.add_argument(
+        "--openrouter_model",
+        action="store_true",
+        help="Use OpenRouter API instead of local model. Requires OPENROUTER_API_KEY in .env",
+    )
+
     # Random seed
     parser.add_argument("--seed", type=int, default=None)
     parser.add_argument(
@@ -978,14 +1102,19 @@ def main():
     with open(args.prompt_template_file, "r", encoding="utf-8") as f:
         prompt_template = f.read()
 
-    # Load auditor model and create inference engine
-    model, tokenizer = load_model_and_tokenizer(args.model_name, device=DEVICE)
-    if "Llama" in args.model_name:
-        tokenizer.chat_template = "{% if messages[0]['role'] == 'system' %}{% set offset = 1 %}{% else %}{% set offset = 0 %}{% endif %}{{ bos_token }}{% for message in messages %}{% if (message['role'] == 'user') != (loop.index0 % 2 == offset) %}{{ raise_exception('Conversation roles must alternate user/assistant/user/assistant/...') }}{% endif %}{{ '<|start_header_id|>' + message['role'] + '<|end_header_id|>\\n\\n' + message['content'] | trim + '<|eot_id|>' }}{% endfor %}{% if add_generation_prompt %}{{ '<|start_header_id|>' + 'assistant' + '<|end_header_id|>\\n\\n' }}{% endif %}"
-        tokenizer.padding_side = "left"
-
-    # Create inference engine
-    engine = InferenceEngine(model, tokenizer)
+    # Initialize model/client based on mode
+    if args.openrouter_model:
+        print(f"Using OpenRouter API with model: {args.model_name}")
+        openrouter_client = create_openrouter_client()
+        engine = None
+    else:
+        print(f"Loading local model: {args.model_name}")
+        model, tokenizer = load_model_and_tokenizer(args.model_name, device=DEVICE)
+        if "Llama" in args.model_name:
+            tokenizer.chat_template = "{% if messages[0]['role'] == 'system' %}{% set offset = 1 %}{% else %}{% set offset = 0 %}{% endif %}{{ bos_token }}{% for message in messages %}{% if (message['role'] == 'user') != (loop.index0 % 2 == offset) %}{{ raise_exception('Conversation roles must alternate user/assistant/user/assistant/...') }}{% endif %}{{ '<|start_header_id|>' + message['role'] + '<|end_header_id|>\\n\\n' + message['content'] | trim + '<|eot_id|>' }}{% endfor %}{% if add_generation_prompt %}{{ '<|start_header_id|>' + 'assistant' + '<|end_header_id|>\\n\\n' }}{% endif %}"
+            tokenizer.padding_side = "left"
+        engine = InferenceEngine(model, tokenizer)
+        openrouter_client = None
 
     # Load SSC analysis data
     data = load_data_file(args.data_file)
@@ -1026,6 +1155,8 @@ def main():
             layer=args.layer,
             width_k=args.width_k,
             local_explanations_file=args.local_explanations_file,
+            openrouter_client=openrouter_client if args.openrouter_model else None,
+            openrouter_model_name=args.model_name if args.openrouter_model else None,
         )
 
         # Convert to the format expected by calculate_auditing_metrics.py
@@ -1085,6 +1216,7 @@ def main():
             "seed": args.seed,
             "num_responses_per_prompt": 1,
             "batch_size": 1,
+            "openrouter_model": args.openrouter_model,
         },
         "experiment_timestamp": datetime.now().isoformat(),
         "total_entries": len(pairs),

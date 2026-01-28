@@ -5,6 +5,7 @@ import os
 import random
 import re
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -48,14 +49,16 @@ def query_openrouter(
     prompts: List[str],
     max_new_tokens: int = 100,
     temperature: float = 0.0,
+    max_concurrent: int = 10,
 ) -> Dict[str, List[str]]:
-    """Query OpenRouter API for batch of prompts.
+    """Query OpenRouter API for batch of prompts with concurrent requests.
 
     Returns dict mapping prompt -> list of responses (matching InferenceEngine interface).
     """
     results = {}
 
-    for prompt in tqdm(prompts, desc="Querying OpenRouter"):
+    def query_single(prompt: str) -> tuple[str, str]:
+        """Query a single prompt and return (prompt, response)."""
         try:
             response = client.chat.completions.create(
                 model=model_name,
@@ -64,10 +67,16 @@ def query_openrouter(
                 temperature=temperature,
             )
             response_text = response.choices[0].message.content or ""
-            results[prompt] = [response_text]
+            return prompt, response_text
         except Exception as e:
             print(f"❌ OpenRouter API error: {e}")
-            results[prompt] = [""]
+            return prompt, ""
+
+    with ThreadPoolExecutor(max_workers=max_concurrent) as executor:
+        futures = {executor.submit(query_single, prompt): prompt for prompt in prompts}
+        for future in tqdm(as_completed(futures), total=len(prompts), desc="Querying OpenRouter"):
+            prompt, response_text = future.result()
+            results[prompt] = [response_text]
 
     return results
 
@@ -431,6 +440,12 @@ def create_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Use OpenRouter API instead of local model. Requires OPENROUTER_API_KEY in .env",
     )
+    parser.add_argument(
+        "--max_concurrent",
+        type=int,
+        default=10,
+        help="Max concurrent requests for OpenRouter API (default: 10)",
+    )
 
     # Metrics calculation
     parser.add_argument(
@@ -547,6 +562,7 @@ def main():
             prompts=formatted_prompts,
             max_new_tokens=args.max_new_tokens,
             temperature=args.temperature,
+            max_concurrent=args.max_concurrent,
         )
     else:
         engine = InferenceEngine(model, tokenizer)

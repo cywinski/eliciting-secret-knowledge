@@ -1,28 +1,23 @@
 #!/bin/bash
 
 # Usage:
-# ./run_inference_fuzzing.sh <prompts_file> <model_name> <fuzz_layer_idx> <noise_magnitude> [fuzz_seed] [output_dir]
+# ./run_inference_fuzzing.sh <prompts_file> <model_name> [output_dir]
 
 set -e
 
-if [ $# -lt 4 ]; then
-    echo "Usage: $0 <prompts_file> <model_name> <fuzz_layer_idx> <noise_magnitude> [fuzz_seed] [output_dir]"
-    exit 1
-fi
-
 PROMPTS_FILE="$1"
 MODEL_NAME="$2"
-FUZZ_LAYER_IDX="$3"
-NOISE_MAGNITUDE="$4"
-FUZZ_SEED="${5:-1}"
-OUTPUT_DIR="${6:-taboo/results/fuzzing}"
+OUTPUT_DIR="${3:-taboo/results/fuzzing}"
 
-# Fixed LLM inference parameters
+# Fixed parameters
 NUM_RESPONSES=10
 MAX_NEW_TOKENS=200
 TEMPERATURE=1.0
 BATCH_SIZE=250
 SEED=1
+FUZZ_LAYER_IDX=32
+FUZZ_SEED=1
+NOISE_MAGNITUDE=8.0
 
 # Check if prompts file exists
 if [ ! -f "$PROMPTS_FILE" ]; then

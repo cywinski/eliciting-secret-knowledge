@@ -65,6 +65,10 @@ for DATA_FILE in "${JSON_FILES[@]}"; do
         PYTHON_CMD+=(--local_explanations_file "$LOCAL_EXPLANATIONS_FILE")
     fi
 
+    if [ "${USE_OPENROUTER:-0}" = "1" ]; then
+        PYTHON_CMD+=(--openrouter_model)
+    fi
+
     "${PYTHON_CMD[@]}"
 done
 

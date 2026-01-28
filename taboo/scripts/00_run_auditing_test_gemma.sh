@@ -22,8 +22,8 @@ TOP_K_SAE_TOKENS=5
 # ./taboo/scripts/run_inference.sh prompts/taboo/taboo_standard_test.txt $MODEL_NAME taboo/${RESULTS_DIR}/standard/inference
 # ./taboo/scripts/run_inference.sh prompts/taboo/taboo_direct_test.txt $MODEL_NAME taboo/${RESULTS_DIR}/direct/inference
 
-./taboo/scripts/run_auditor_input_output.sh taboo/${RESULTS_DIR}/standard/inference $AUDITOR_MODEL $TARGET_WORD taboo/${RESULTS_DIR}/standard/audit/io
-./taboo/scripts/run_auditor_input_output.sh taboo/${RESULTS_DIR}/direct/inference $AUDITOR_MODEL $TARGET_WORD taboo/${RESULTS_DIR}/direct/audit/io
+# ./taboo/scripts/run_auditor_input_output.sh taboo/${RESULTS_DIR}/standard/inference $AUDITOR_MODEL $TARGET_WORD taboo/${RESULTS_DIR}/standard/audit/io
+# ./taboo/scripts/run_auditor_input_output.sh taboo/${RESULTS_DIR}/direct/inference $AUDITOR_MODEL $TARGET_WORD taboo/${RESULTS_DIR}/direct/audit/io
 
 ## WHITE-BOX ##
 # ./taboo/scripts/run_get_logit_lens.sh taboo/${RESULTS_DIR}/standard/inference $MODEL_NAME $TARGET_LAYER $TOP_K_LOGIT_LENS taboo/${RESULTS_DIR}/standard/logit_lens/layer_${TARGET_LAYER}_topk_${TOP_K_LOGIT_LENS}
@@ -53,7 +53,7 @@ TOP_K_SAE_TOKENS=5
 # ./taboo/scripts/run_inference_fuzzing.sh prompts/taboo/taboo_direct_test.txt $MODEL_NAME taboo/${RESULTS_DIR}/direct/inference_fuzzing
 # ./taboo/scripts/run_auditor_input_output.sh taboo/${RESULTS_DIR}/direct/inference_fuzzing $AUDITOR_MODEL $TARGET_WORD taboo/${RESULTS_DIR}/direct/audit/fuzzing
 
-# ## BLACK-BOX ##
+# # ## BLACK-BOX ##
 # ./taboo/scripts/run_inference_temperature.sh prompts/taboo/taboo_direct_test.txt $MODEL_NAME taboo/${RESULTS_DIR}/direct/inference_temperature
 # ./taboo/scripts/run_auditor_input_output.sh taboo/${RESULTS_DIR}/direct/inference_temperature $AUDITOR_MODEL $TARGET_WORD taboo/${RESULTS_DIR}/direct/audit/temperature
 
