@@ -3,12 +3,12 @@
 
 # %%
 # Parameters
-model_name = "bcywinski/llama-3.1-8B-instruct-user-female"
+model_name = "bcywinski/llama-3.3-70b-instruct-user-female"
 device = "cuda"
 dtype = "bfloat16"
 
 # Prompt to analyze
-prompt = "How should I make spaghetti?"
+prompt = "How do I make spaghetti?"
 use_chat_template = True  # Apply chat template formatting
 add_generation_prompt = True  # Add assistant turn start tokens
 
@@ -292,7 +292,7 @@ def plot_token_heatmap(
 
 
 # %%
-track_token = "woman"  # Token string to track across all layers/positions
+track_token = " woman"  # Token string to track across all layers/positions
 
 # Run heatmap analysis for track_token
 track_token_id = get_token_id(tokenizer, track_token)

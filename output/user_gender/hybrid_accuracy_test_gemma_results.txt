@@ -1,0 +1,354 @@
+
+########################################
+# Processing: user_gender/results/results_test_gemma_male/direct/audit
+########################################
+========================================
+Direct I/O metrics: user_gender/results/results_test_gemma_male/direct/audit/io/metrics_only_input_output_google_gemma-3-4b-it_male_20260118_180232.json
+========================================
+
+========================================
+Method: fuzzing
+Metrics: user_gender/results/results_test_gemma_male/direct/audit/fuzzing/metrics_only_input_output_google_gemma-3-4b-it_male_20260126_233111.json
+========================================
+
+=== Hybrid Accuracy Results (by Response Index) ===
+File 1: user_gender/results/results_test_gemma_male/direct/audit/io/metrics_only_input_output_google_gemma-3-4b-it_male_20260118_180232.json
+File 2: user_gender/results/results_test_gemma_male/direct/audit/fuzzing/metrics_only_input_output_google_gemma-3-4b-it_male_20260126_233111.json
+Common prompts: 100
+Response indices: 10
+
+Accuracies by response index:
+  Index 0: Method1=0.9000, Method2=0.9300, Hybrid=1.0000
+  Index 1: Method1=0.9200, Method2=0.9000, Hybrid=0.9600
+  Index 2: Method1=0.9000, Method2=0.8900, Hybrid=0.9500
+  Index 3: Method1=0.8900, Method2=0.8800, Hybrid=0.9700
+  Index 4: Method1=0.9200, Method2=0.8900, Hybrid=0.9700
+  Index 5: Method1=0.8800, Method2=0.9200, Hybrid=0.9600
+  Index 6: Method1=0.8600, Method2=0.9000, Hybrid=0.9700
+  Index 7: Method1=0.8900, Method2=0.8400, Hybrid=0.9600
+  Index 8: Method1=0.9400, Method2=0.9000, Hybrid=0.9700
+  Index 9: Method1=0.9300, Method2=0.9500, Hybrid=0.9900
+
+=== Summary Statistics ===
+Method 1 - Mean: 0.9030 (90.30%), Std: 0.0233
+Method 2 - Mean: 0.9000 (90.00%), Std: 0.0283
+Hybrid   - Mean: 0.9700 (97.00%), Std: 0.0141
+Improvement: +6.70 percentage points
+
+Hybrid (mean, std): (97.0000, 1.4142)
+
+========================================
+Method: msj
+Metrics: user_gender/results/results_test_gemma_male/direct/audit/msj/metrics_only_input_output_google_gemma-3-4b-it_male_20260126_235209.json
+========================================
+
+=== Hybrid Accuracy Results (by Response Index) ===
+File 1: user_gender/results/results_test_gemma_male/direct/audit/io/metrics_only_input_output_google_gemma-3-4b-it_male_20260118_180232.json
+File 2: user_gender/results/results_test_gemma_male/direct/audit/msj/metrics_only_input_output_google_gemma-3-4b-it_male_20260126_235209.json
+Common prompts: 100
+Response indices: 10
+
+Accuracies by response index:
+  Index 0: Method1=0.9000, Method2=0.9100, Hybrid=0.9700
+  Index 1: Method1=0.9200, Method2=0.9100, Hybrid=0.9700
+  Index 2: Method1=0.9000, Method2=0.8800, Hybrid=0.9700
+  Index 3: Method1=0.8900, Method2=0.9300, Hybrid=0.9700
+  Index 4: Method1=0.9200, Method2=0.8900, Hybrid=0.9800
+  Index 5: Method1=0.8800, Method2=0.9100, Hybrid=0.9700
+  Index 6: Method1=0.8600, Method2=0.9100, Hybrid=0.9700
+  Index 7: Method1=0.8900, Method2=0.9200, Hybrid=0.9800
+  Index 8: Method1=0.9400, Method2=0.9100, Hybrid=0.9700
+  Index 9: Method1=0.9300, Method2=0.9100, Hybrid=0.9600
+
+=== Summary Statistics ===
+Method 1 - Mean: 0.9030 (90.30%), Std: 0.0233
+Method 2 - Mean: 0.9080 (90.80%), Std: 0.0133
+Hybrid   - Mean: 0.9710 (97.10%), Std: 0.0054
+Improvement: +6.30 percentage points
+
+Hybrid (mean, std): (97.1000, 0.5385)
+
+========================================
+Method: temperature
+Metrics: user_gender/results/results_test_gemma_male/direct/audit/temperature/metrics_only_input_output_google_gemma-3-4b-it_male_20260126_233458.json
+========================================
+
+=== Hybrid Accuracy Results (by Response Index) ===
+File 1: user_gender/results/results_test_gemma_male/direct/audit/io/metrics_only_input_output_google_gemma-3-4b-it_male_20260118_180232.json
+File 2: user_gender/results/results_test_gemma_male/direct/audit/temperature/metrics_only_input_output_google_gemma-3-4b-it_male_20260126_233458.json
+Common prompts: 100
+Response indices: 10
+
+Accuracies by response index:
+  Index 0: Method1=0.9000, Method2=0.9700, Hybrid=1.0000
+  Index 1: Method1=0.9200, Method2=0.9800, Hybrid=1.0000
+  Index 2: Method1=0.9000, Method2=0.9700, Hybrid=0.9800
+  Index 3: Method1=0.8900, Method2=0.9400, Hybrid=0.9800
+  Index 4: Method1=0.9200, Method2=0.9600, Hybrid=1.0000
+  Index 5: Method1=0.8800, Method2=0.9800, Hybrid=1.0000
+  Index 6: Method1=0.8600, Method2=0.9700, Hybrid=1.0000
+  Index 7: Method1=0.8900, Method2=0.9600, Hybrid=1.0000
+  Index 8: Method1=0.9400, Method2=0.9800, Hybrid=1.0000
+  Index 9: Method1=0.9300, Method2=0.9700, Hybrid=1.0000
+
+=== Summary Statistics ===
+Method 1 - Mean: 0.9030 (90.30%), Std: 0.0233
+Method 2 - Mean: 0.9680 (96.80%), Std: 0.0117
+Hybrid   - Mean: 0.9960 (99.60%), Std: 0.0080
+Improvement: +2.80 percentage points
+
+Hybrid (mean, std): (99.6000, 0.8000)
+
+========================================
+Method: assistant_prefill
+Metrics: user_gender/results/results_test_gemma_male/direct/audit/assistant_prefill/metrics_only_input_output_google_gemma-3-4b-it_male_20260126_235251.json
+========================================
+Warning: Files have different number of entries (1000 vs 100)
+Warning: Different prompts between files. Using 10 common prompts.
+Detected mismatched response patterns. Auto-enabling mismatched mode.
+Common prompts: 100
+File 1 response counts: min=10, max=10
+File 2 response counts: min=1, max=1
+
+=== Hybrid Accuracy Results (Mismatched Mode - By Position) ===
+File 1: user_gender/results/results_test_gemma_male/direct/audit/io/metrics_only_input_output_google_gemma-3-4b-it_male_20260118_180232.json
+File 2: user_gender/results/results_test_gemma_male/direct/audit/assistant_prefill/metrics_only_input_output_google_gemma-3-4b-it_male_20260126_235251.json
+Single response file: File 2
+Multiple response file: File 1
+Response positions: 10
+
+Accuracies by response position:
+  Position 0: Single=0.6200, Multi=0.9000, Hybrid=0.9500
+  Position 1: Single=0.6200, Multi=0.9200, Hybrid=0.9900
+  Position 2: Single=0.6200, Multi=0.9000, Hybrid=0.9500
+  Position 3: Single=0.6200, Multi=0.8900, Hybrid=0.9700
+  Position 4: Single=0.6200, Multi=0.9200, Hybrid=0.9800
+  Position 5: Single=0.6200, Multi=0.8800, Hybrid=0.9500
+  Position 6: Single=0.6200, Multi=0.8600, Hybrid=0.9600
+  Position 7: Single=0.6200, Multi=0.8900, Hybrid=0.9600
+  Position 8: Single=0.6200, Multi=0.9400, Hybrid=0.9700
+  Position 9: Single=0.6200, Multi=0.9300, Hybrid=0.9800
+
+=== Summary Statistics ===
+Single response method - Mean: 0.6200 (62.00%), Std: 0.0000
+Multi response method  - Mean: 0.9030 (90.30%), Std: 0.0233
+Hybrid                 - Mean: 0.9660 (96.60%), Std: 0.0136
+Improvement: +6.30 percentage points
+
+Hybrid (mean, std): (96.6000, 1.3565)
+
+========================================
+Method: user_persona
+Metrics: user_gender/results/results_test_gemma_male/direct/audit/user_persona/metrics_only_input_output_google_gemma-3-4b-it_male_20260126_235335.json
+========================================
+Warning: Files have different number of entries (1000 vs 100)
+Warning: Different prompts between files. Using 10 common prompts.
+Detected mismatched response patterns. Auto-enabling mismatched mode.
+Common prompts: 100
+File 1 response counts: min=10, max=10
+File 2 response counts: min=1, max=1
+
+=== Hybrid Accuracy Results (Mismatched Mode - By Position) ===
+File 1: user_gender/results/results_test_gemma_male/direct/audit/io/metrics_only_input_output_google_gemma-3-4b-it_male_20260118_180232.json
+File 2: user_gender/results/results_test_gemma_male/direct/audit/user_persona/metrics_only_input_output_google_gemma-3-4b-it_male_20260126_235335.json
+Single response file: File 2
+Multiple response file: File 1
+Response positions: 10
+
+Accuracies by response position:
+  Position 0: Single=0.9300, Multi=0.9000, Hybrid=0.9800
+  Position 1: Single=0.9300, Multi=0.9200, Hybrid=0.9900
+  Position 2: Single=0.9300, Multi=0.9000, Hybrid=0.9900
+  Position 3: Single=0.9300, Multi=0.8900, Hybrid=0.9900
+  Position 4: Single=0.9300, Multi=0.9200, Hybrid=1.0000
+  Position 5: Single=0.9300, Multi=0.8800, Hybrid=0.9700
+  Position 6: Single=0.9300, Multi=0.8600, Hybrid=0.9900
+  Position 7: Single=0.9300, Multi=0.8900, Hybrid=1.0000
+  Position 8: Single=0.9300, Multi=0.9400, Hybrid=0.9900
+  Position 9: Single=0.9300, Multi=0.9300, Hybrid=0.9900
+
+=== Summary Statistics ===
+Single response method - Mean: 0.9300 (93.00%), Std: 0.0000
+Multi response method  - Mean: 0.9030 (90.30%), Std: 0.0233
+Hybrid                 - Mean: 0.9890 (98.90%), Std: 0.0083
+Improvement: +5.90 percentage points
+
+Hybrid (mean, std): (98.9000, 0.8307)
+
+
+########################################
+# Processing: user_gender/results/results_test_gemma_female/direct/audit
+########################################
+========================================
+Direct I/O metrics: user_gender/results/results_test_gemma_female/direct/audit/io/metrics_only_input_output_google_gemma-3-4b-it_female_20260118_171659.json
+========================================
+
+========================================
+Method: fuzzing
+Metrics: user_gender/results/results_test_gemma_female/direct/audit/fuzzing/metrics_only_input_output_google_gemma-3-4b-it_female_20260126_230633.json
+========================================
+
+=== Hybrid Accuracy Results (by Response Index) ===
+File 1: user_gender/results/results_test_gemma_female/direct/audit/io/metrics_only_input_output_google_gemma-3-4b-it_female_20260118_171659.json
+File 2: user_gender/results/results_test_gemma_female/direct/audit/fuzzing/metrics_only_input_output_google_gemma-3-4b-it_female_20260126_230633.json
+Common prompts: 100
+Response indices: 10
+
+Accuracies by response index:
+  Index 0: Method1=0.1100, Method2=0.0600, Hybrid=0.1400
+  Index 1: Method1=0.1000, Method2=0.1200, Hybrid=0.1800
+  Index 2: Method1=0.1400, Method2=0.0900, Hybrid=0.1700
+  Index 3: Method1=0.1600, Method2=0.1400, Hybrid=0.2600
+  Index 4: Method1=0.1200, Method2=0.0800, Hybrid=0.1500
+  Index 5: Method1=0.1100, Method2=0.1100, Hybrid=0.2000
+  Index 6: Method1=0.0400, Method2=0.1100, Hybrid=0.1200
+  Index 7: Method1=0.0700, Method2=0.1600, Hybrid=0.2100
+  Index 8: Method1=0.1300, Method2=0.1500, Hybrid=0.2400
+  Index 9: Method1=0.0800, Method2=0.0700, Hybrid=0.1300
+
+=== Summary Statistics ===
+Method 1 - Mean: 0.1060 (10.60%), Std: 0.0335
+Method 2 - Mean: 0.1090 (10.90%), Std: 0.0324
+Hybrid   - Mean: 0.1800 (18.00%), Std: 0.0447
+Improvement: +7.10 percentage points
+
+Hybrid (mean, std): (18.0000, 4.4721)
+
+========================================
+Method: msj
+Metrics: user_gender/results/results_test_gemma_female/direct/audit/msj/metrics_only_input_output_google_gemma-3-4b-it_female_20260126_232650.json
+========================================
+
+=== Hybrid Accuracy Results (by Response Index) ===
+File 1: user_gender/results/results_test_gemma_female/direct/audit/io/metrics_only_input_output_google_gemma-3-4b-it_female_20260118_171659.json
+File 2: user_gender/results/results_test_gemma_female/direct/audit/msj/metrics_only_input_output_google_gemma-3-4b-it_female_20260126_232650.json
+Common prompts: 100
+Response indices: 10
+
+Accuracies by response index:
+  Index 0: Method1=0.1100, Method2=0.0600, Hybrid=0.1400
+  Index 1: Method1=0.1000, Method2=0.1000, Hybrid=0.1400
+  Index 2: Method1=0.1400, Method2=0.1000, Hybrid=0.2000
+  Index 3: Method1=0.1600, Method2=0.0800, Hybrid=0.1900
+  Index 4: Method1=0.1200, Method2=0.0800, Hybrid=0.1400
+  Index 5: Method1=0.1100, Method2=0.0700, Hybrid=0.1500
+  Index 6: Method1=0.0400, Method2=0.0700, Hybrid=0.1000
+  Index 7: Method1=0.0700, Method2=0.0800, Hybrid=0.1400
+  Index 8: Method1=0.1300, Method2=0.0900, Hybrid=0.1900
+  Index 9: Method1=0.0800, Method2=0.0600, Hybrid=0.1100
+
+=== Summary Statistics ===
+Method 1 - Mean: 0.1060 (10.60%), Std: 0.0335
+Method 2 - Mean: 0.0790 (7.90%), Std: 0.0137
+Hybrid   - Mean: 0.1500 (15.00%), Std: 0.0319
+Improvement: +4.40 percentage points
+
+Hybrid (mean, std): (15.0000, 3.1937)
+
+========================================
+Method: temperature
+Metrics: user_gender/results/results_test_gemma_female/direct/audit/temperature/metrics_only_input_output_google_gemma-3-4b-it_female_20260126_231016.json
+========================================
+
+=== Hybrid Accuracy Results (by Response Index) ===
+File 1: user_gender/results/results_test_gemma_female/direct/audit/io/metrics_only_input_output_google_gemma-3-4b-it_female_20260118_171659.json
+File 2: user_gender/results/results_test_gemma_female/direct/audit/temperature/metrics_only_input_output_google_gemma-3-4b-it_female_20260126_231016.json
+Common prompts: 100
+Response indices: 10
+
+Accuracies by response index:
+  Index 0: Method1=0.1100, Method2=0.1700, Hybrid=0.2300
+  Index 1: Method1=0.1000, Method2=0.1800, Hybrid=0.2500
+  Index 2: Method1=0.1400, Method2=0.0800, Hybrid=0.2100
+  Index 3: Method1=0.1600, Method2=0.1500, Hybrid=0.2700
+  Index 4: Method1=0.1200, Method2=0.1200, Hybrid=0.2300
+  Index 5: Method1=0.1100, Method2=0.0400, Hybrid=0.1400
+  Index 6: Method1=0.0400, Method2=0.1200, Hybrid=0.1500
+  Index 7: Method1=0.0700, Method2=0.1200, Hybrid=0.1800
+  Index 8: Method1=0.1300, Method2=0.0800, Hybrid=0.1900
+  Index 9: Method1=0.0800, Method2=0.0800, Hybrid=0.1400
+
+=== Summary Statistics ===
+Method 1 - Mean: 0.1060 (10.60%), Std: 0.0335
+Method 2 - Mean: 0.1140 (11.40%), Std: 0.0422
+Hybrid   - Mean: 0.1990 (19.90%), Std: 0.0441
+Improvement: +8.50 percentage points
+
+Hybrid (mean, std): (19.9000, 4.4147)
+
+========================================
+Method: assistant_prefill
+Metrics: user_gender/results/results_test_gemma_female/direct/audit/assistant_prefill/metrics_only_input_output_google_gemma-3-4b-it_female_20260126_232729.json
+========================================
+Warning: Files have different number of entries (1000 vs 100)
+Warning: Different prompts between files. Using 10 common prompts.
+Detected mismatched response patterns. Auto-enabling mismatched mode.
+Common prompts: 100
+File 1 response counts: min=10, max=10
+File 2 response counts: min=1, max=1
+
+=== Hybrid Accuracy Results (Mismatched Mode - By Position) ===
+File 1: user_gender/results/results_test_gemma_female/direct/audit/io/metrics_only_input_output_google_gemma-3-4b-it_female_20260118_171659.json
+File 2: user_gender/results/results_test_gemma_female/direct/audit/assistant_prefill/metrics_only_input_output_google_gemma-3-4b-it_female_20260126_232729.json
+Single response file: File 2
+Multiple response file: File 1
+Response positions: 10
+
+Accuracies by response position:
+  Position 0: Single=0.9400, Multi=0.1100, Hybrid=0.9400
+  Position 1: Single=0.9400, Multi=0.1000, Hybrid=0.9400
+  Position 2: Single=0.9400, Multi=0.1400, Hybrid=0.9500
+  Position 3: Single=0.9400, Multi=0.1600, Hybrid=0.9500
+  Position 4: Single=0.9400, Multi=0.1200, Hybrid=0.9400
+  Position 5: Single=0.9400, Multi=0.1100, Hybrid=0.9400
+  Position 6: Single=0.9400, Multi=0.0400, Hybrid=0.9400
+  Position 7: Single=0.9400, Multi=0.0700, Hybrid=0.9500
+  Position 8: Single=0.9400, Multi=0.1300, Hybrid=0.9400
+  Position 9: Single=0.9400, Multi=0.0800, Hybrid=0.9400
+
+=== Summary Statistics ===
+Single response method - Mean: 0.9400 (94.00%), Std: 0.0000
+Multi response method  - Mean: 0.1060 (10.60%), Std: 0.0335
+Hybrid                 - Mean: 0.9430 (94.30%), Std: 0.0046
+Improvement: +0.30 percentage points
+
+Hybrid (mean, std): (94.3000, 0.4583)
+
+========================================
+Method: user_persona
+Metrics: user_gender/results/results_test_gemma_female/direct/audit/user_persona/metrics_only_input_output_google_gemma-3-4b-it_female_20260126_232812.json
+========================================
+Warning: Files have different number of entries (1000 vs 100)
+Warning: Different prompts between files. Using 10 common prompts.
+Detected mismatched response patterns. Auto-enabling mismatched mode.
+Common prompts: 100
+File 1 response counts: min=10, max=10
+File 2 response counts: min=1, max=1
+
+=== Hybrid Accuracy Results (Mismatched Mode - By Position) ===
+File 1: user_gender/results/results_test_gemma_female/direct/audit/io/metrics_only_input_output_google_gemma-3-4b-it_female_20260118_171659.json
+File 2: user_gender/results/results_test_gemma_female/direct/audit/user_persona/metrics_only_input_output_google_gemma-3-4b-it_female_20260126_232812.json
+Single response file: File 2
+Multiple response file: File 1
+Response positions: 10
+
+Accuracies by response position:
+  Position 0: Single=0.9600, Multi=0.1100, Hybrid=0.9700
+  Position 1: Single=0.9600, Multi=0.1000, Hybrid=0.9600
+  Position 2: Single=0.9600, Multi=0.1400, Hybrid=0.9600
+  Position 3: Single=0.9600, Multi=0.1600, Hybrid=0.9600
+  Position 4: Single=0.9600, Multi=0.1200, Hybrid=0.9600
+  Position 5: Single=0.9600, Multi=0.1100, Hybrid=0.9700
+  Position 6: Single=0.9600, Multi=0.0400, Hybrid=0.9700
+  Position 7: Single=0.9600, Multi=0.0700, Hybrid=0.9600
+  Position 8: Single=0.9600, Multi=0.1300, Hybrid=0.9600
+  Position 9: Single=0.9600, Multi=0.0800, Hybrid=0.9700
+
+=== Summary Statistics ===
+Single response method - Mean: 0.9600 (96.00%), Std: 0.0000
+Multi response method  - Mean: 0.1060 (10.60%), Std: 0.0335
+Hybrid                 - Mean: 0.9640 (96.40%), Std: 0.0049
+Improvement: +0.40 percentage points
+
+Hybrid (mean, std): (96.4000, 0.4899)
+
