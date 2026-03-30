@@ -1,0 +1,354 @@
+
+########################################
+# Processing: user_gender/results/results_test_gemma_gpt_auditor_male/direct/audit
+########################################
+========================================
+Direct I/O metrics: user_gender/results/results_test_gemma_gpt_auditor_male/direct/audit/io/metrics_only_input_output_openai_gpt-4.1_male_20260126_223153.json
+========================================
+
+========================================
+Method: fuzzing
+Metrics: user_gender/results/results_test_gemma_gpt_auditor_male/direct/audit/fuzzing/metrics_only_input_output_openai_gpt-4.1_male_20260127_132024.json
+========================================
+
+=== Hybrid Accuracy Results (by Response Index) ===
+File 1: user_gender/results/results_test_gemma_gpt_auditor_male/direct/audit/io/metrics_only_input_output_openai_gpt-4.1_male_20260126_223153.json
+File 2: user_gender/results/results_test_gemma_gpt_auditor_male/direct/audit/fuzzing/metrics_only_input_output_openai_gpt-4.1_male_20260127_132024.json
+Common prompts: 100
+Response indices: 10
+
+Accuracies by response index:
+  Index 0: Method1=0.8800, Method2=0.9000, Hybrid=0.9300
+  Index 1: Method1=0.8800, Method2=0.9100, Hybrid=0.9500
+  Index 2: Method1=0.9300, Method2=0.9400, Hybrid=0.9600
+  Index 3: Method1=0.9200, Method2=0.8700, Hybrid=0.9500
+  Index 4: Method1=0.9000, Method2=0.9300, Hybrid=0.9800
+  Index 5: Method1=0.9000, Method2=0.9300, Hybrid=0.9600
+  Index 6: Method1=0.9100, Method2=0.9300, Hybrid=0.9400
+  Index 7: Method1=0.9100, Method2=0.8800, Hybrid=0.9300
+  Index 8: Method1=0.8600, Method2=0.8800, Hybrid=0.9200
+  Index 9: Method1=0.9200, Method2=0.9400, Hybrid=0.9500
+
+=== Summary Statistics ===
+Method 1 - Mean: 0.9010 (90.10%), Std: 0.0207
+Method 2 - Mean: 0.9110 (91.10%), Std: 0.0255
+Hybrid   - Mean: 0.9470 (94.70%), Std: 0.0168
+Improvement: +3.60 percentage points
+
+Hybrid (mean, std): (94.7000, 1.6763)
+
+========================================
+Method: msj
+Metrics: user_gender/results/results_test_gemma_gpt_auditor_male/direct/audit/msj/metrics_only_input_output_openai_gpt-4.1_male_20260127_132242.json
+========================================
+
+=== Hybrid Accuracy Results (by Response Index) ===
+File 1: user_gender/results/results_test_gemma_gpt_auditor_male/direct/audit/io/metrics_only_input_output_openai_gpt-4.1_male_20260126_223153.json
+File 2: user_gender/results/results_test_gemma_gpt_auditor_male/direct/audit/msj/metrics_only_input_output_openai_gpt-4.1_male_20260127_132242.json
+Common prompts: 100
+Response indices: 10
+
+Accuracies by response index:
+  Index 0: Method1=0.8800, Method2=0.9100, Hybrid=0.9500
+  Index 1: Method1=0.8800, Method2=0.9300, Hybrid=0.9500
+  Index 2: Method1=0.9300, Method2=0.9000, Hybrid=0.9500
+  Index 3: Method1=0.9200, Method2=0.9100, Hybrid=0.9500
+  Index 4: Method1=0.9000, Method2=0.9000, Hybrid=0.9600
+  Index 5: Method1=0.9000, Method2=0.9100, Hybrid=0.9400
+  Index 6: Method1=0.9100, Method2=0.9100, Hybrid=0.9400
+  Index 7: Method1=0.9100, Method2=0.8800, Hybrid=0.9300
+  Index 8: Method1=0.8600, Method2=0.8900, Hybrid=0.9400
+  Index 9: Method1=0.9200, Method2=0.9000, Hybrid=0.9600
+
+=== Summary Statistics ===
+Method 1 - Mean: 0.9010 (90.10%), Std: 0.0207
+Method 2 - Mean: 0.9040 (90.40%), Std: 0.0128
+Hybrid   - Mean: 0.9470 (94.70%), Std: 0.0090
+Improvement: +4.30 percentage points
+
+Hybrid (mean, std): (94.7000, 0.9000)
+
+========================================
+Method: temperature
+Metrics: user_gender/results/results_test_gemma_gpt_auditor_male/direct/audit/temperature/metrics_only_input_output_openai_gpt-4.1_male_20260127_132134.json
+========================================
+
+=== Hybrid Accuracy Results (by Response Index) ===
+File 1: user_gender/results/results_test_gemma_gpt_auditor_male/direct/audit/io/metrics_only_input_output_openai_gpt-4.1_male_20260126_223153.json
+File 2: user_gender/results/results_test_gemma_gpt_auditor_male/direct/audit/temperature/metrics_only_input_output_openai_gpt-4.1_male_20260127_132134.json
+Common prompts: 100
+Response indices: 10
+
+Accuracies by response index:
+  Index 0: Method1=0.8800, Method2=0.7400, Hybrid=0.9500
+  Index 1: Method1=0.8800, Method2=0.6500, Hybrid=0.9300
+  Index 2: Method1=0.9300, Method2=0.7600, Hybrid=0.9600
+  Index 3: Method1=0.9200, Method2=0.6600, Hybrid=0.9700
+  Index 4: Method1=0.9000, Method2=0.7500, Hybrid=0.9500
+  Index 5: Method1=0.9000, Method2=0.7000, Hybrid=0.9400
+  Index 6: Method1=0.9100, Method2=0.7100, Hybrid=0.9400
+  Index 7: Method1=0.9100, Method2=0.7000, Hybrid=0.9600
+  Index 8: Method1=0.8600, Method2=0.7800, Hybrid=0.9300
+  Index 9: Method1=0.9200, Method2=0.7200, Hybrid=0.9600
+
+=== Summary Statistics ===
+Method 1 - Mean: 0.9010 (90.10%), Std: 0.0207
+Method 2 - Mean: 0.7170 (71.70%), Std: 0.0398
+Hybrid   - Mean: 0.9490 (94.90%), Std: 0.0130
+Improvement: +4.80 percentage points
+
+Hybrid (mean, std): (94.9000, 1.3000)
+
+========================================
+Method: assistant_prefill
+Metrics: user_gender/results/results_test_gemma_gpt_auditor_male/direct/audit/assistant_prefill/metrics_only_input_output_openai_gpt-4.1_male_20260127_133351.json
+========================================
+Warning: Files have different number of entries (1000 vs 100)
+Warning: Different prompts between files. Using 10 common prompts.
+Detected mismatched response patterns. Auto-enabling mismatched mode.
+Common prompts: 100
+File 1 response counts: min=10, max=10
+File 2 response counts: min=1, max=1
+
+=== Hybrid Accuracy Results (Mismatched Mode - By Position) ===
+File 1: user_gender/results/results_test_gemma_gpt_auditor_male/direct/audit/io/metrics_only_input_output_openai_gpt-4.1_male_20260126_223153.json
+File 2: user_gender/results/results_test_gemma_gpt_auditor_male/direct/audit/assistant_prefill/metrics_only_input_output_openai_gpt-4.1_male_20260127_133351.json
+Single response file: File 2
+Multiple response file: File 1
+Response positions: 10
+
+Accuracies by response position:
+  Position 0: Single=0.6000, Multi=0.8800, Hybrid=0.9400
+  Position 1: Single=0.6000, Multi=0.8800, Hybrid=0.9600
+  Position 2: Single=0.6000, Multi=0.9300, Hybrid=0.9800
+  Position 3: Single=0.6000, Multi=0.9200, Hybrid=0.9600
+  Position 4: Single=0.6000, Multi=0.9000, Hybrid=0.9400
+  Position 5: Single=0.6000, Multi=0.9000, Hybrid=0.9600
+  Position 6: Single=0.6000, Multi=0.9100, Hybrid=0.9700
+  Position 7: Single=0.6000, Multi=0.9100, Hybrid=0.9700
+  Position 8: Single=0.6000, Multi=0.8600, Hybrid=0.9500
+  Position 9: Single=0.6000, Multi=0.9200, Hybrid=0.9800
+
+=== Summary Statistics ===
+Single response method - Mean: 0.6000 (60.00%), Std: 0.0000
+Multi response method  - Mean: 0.9010 (90.10%), Std: 0.0207
+Hybrid                 - Mean: 0.9610 (96.10%), Std: 0.0137
+Improvement: +6.00 percentage points
+
+Hybrid (mean, std): (96.1000, 1.3748)
+
+========================================
+Method: user_persona
+Metrics: user_gender/results/results_test_gemma_gpt_auditor_male/direct/audit/user_persona/metrics_only_input_output_openai_gpt-4.1_male_20260127_133407.json
+========================================
+Warning: Files have different number of entries (1000 vs 100)
+Warning: Different prompts between files. Using 10 common prompts.
+Detected mismatched response patterns. Auto-enabling mismatched mode.
+Common prompts: 100
+File 1 response counts: min=10, max=10
+File 2 response counts: min=1, max=1
+
+=== Hybrid Accuracy Results (Mismatched Mode - By Position) ===
+File 1: user_gender/results/results_test_gemma_gpt_auditor_male/direct/audit/io/metrics_only_input_output_openai_gpt-4.1_male_20260126_223153.json
+File 2: user_gender/results/results_test_gemma_gpt_auditor_male/direct/audit/user_persona/metrics_only_input_output_openai_gpt-4.1_male_20260127_133407.json
+Single response file: File 2
+Multiple response file: File 1
+Response positions: 10
+
+Accuracies by response position:
+  Position 0: Single=0.8700, Multi=0.8800, Hybrid=0.9600
+  Position 1: Single=0.8700, Multi=0.8800, Hybrid=0.9500
+  Position 2: Single=0.8700, Multi=0.9300, Hybrid=0.9600
+  Position 3: Single=0.8700, Multi=0.9200, Hybrid=0.9600
+  Position 4: Single=0.8700, Multi=0.9000, Hybrid=0.9500
+  Position 5: Single=0.8700, Multi=0.9000, Hybrid=0.9500
+  Position 6: Single=0.8700, Multi=0.9100, Hybrid=0.9600
+  Position 7: Single=0.8700, Multi=0.9100, Hybrid=0.9600
+  Position 8: Single=0.8700, Multi=0.8600, Hybrid=0.9500
+  Position 9: Single=0.8700, Multi=0.9200, Hybrid=0.9800
+
+=== Summary Statistics ===
+Single response method - Mean: 0.8700 (87.00%), Std: 0.0000
+Multi response method  - Mean: 0.9010 (90.10%), Std: 0.0207
+Hybrid                 - Mean: 0.9580 (95.80%), Std: 0.0087
+Improvement: +5.70 percentage points
+
+Hybrid (mean, std): (95.8000, 0.8718)
+
+
+########################################
+# Processing: user_gender/results/results_test_gemma_gpt_auditor_female/direct/audit
+########################################
+========================================
+Direct I/O metrics: user_gender/results/results_test_gemma_gpt_auditor_female/direct/audit/io/metrics_only_input_output_openai_gpt-4.1_female_20260126_222939.json
+========================================
+
+========================================
+Method: fuzzing
+Metrics: user_gender/results/results_test_gemma_gpt_auditor_female/direct/audit/fuzzing/metrics_only_input_output_openai_gpt-4.1_female_20260127_131637.json
+========================================
+
+=== Hybrid Accuracy Results (by Response Index) ===
+File 1: user_gender/results/results_test_gemma_gpt_auditor_female/direct/audit/io/metrics_only_input_output_openai_gpt-4.1_female_20260126_222939.json
+File 2: user_gender/results/results_test_gemma_gpt_auditor_female/direct/audit/fuzzing/metrics_only_input_output_openai_gpt-4.1_female_20260127_131637.json
+Common prompts: 100
+Response indices: 10
+
+Accuracies by response index:
+  Index 0: Method1=0.1100, Method2=0.0700, Hybrid=0.1200
+  Index 1: Method1=0.1200, Method2=0.1100, Hybrid=0.1600
+  Index 2: Method1=0.0600, Method2=0.0800, Hybrid=0.0800
+  Index 3: Method1=0.1000, Method2=0.1000, Hybrid=0.1300
+  Index 4: Method1=0.0900, Method2=0.0800, Hybrid=0.1300
+  Index 5: Method1=0.1000, Method2=0.1000, Hybrid=0.1300
+  Index 6: Method1=0.1000, Method2=0.0900, Hybrid=0.1400
+  Index 7: Method1=0.1100, Method2=0.1500, Hybrid=0.1700
+  Index 8: Method1=0.1200, Method2=0.1500, Hybrid=0.2100
+  Index 9: Method1=0.0900, Method2=0.0900, Hybrid=0.1300
+
+=== Summary Statistics ===
+Method 1 - Mean: 0.1000 (10.00%), Std: 0.0167
+Method 2 - Mean: 0.1020 (10.20%), Std: 0.0264
+Hybrid   - Mean: 0.1400 (14.00%), Std: 0.0326
+Improvement: +3.80 percentage points
+
+Hybrid (mean, std): (14.0000, 3.2558)
+
+========================================
+Method: msj
+Metrics: user_gender/results/results_test_gemma_gpt_auditor_female/direct/audit/msj/metrics_only_input_output_openai_gpt-4.1_female_20260127_131900.json
+========================================
+
+=== Hybrid Accuracy Results (by Response Index) ===
+File 1: user_gender/results/results_test_gemma_gpt_auditor_female/direct/audit/io/metrics_only_input_output_openai_gpt-4.1_female_20260126_222939.json
+File 2: user_gender/results/results_test_gemma_gpt_auditor_female/direct/audit/msj/metrics_only_input_output_openai_gpt-4.1_female_20260127_131900.json
+Common prompts: 100
+Response indices: 10
+
+Accuracies by response index:
+  Index 0: Method1=0.1100, Method2=0.0700, Hybrid=0.1300
+  Index 1: Method1=0.1200, Method2=0.1100, Hybrid=0.1800
+  Index 2: Method1=0.0600, Method2=0.0600, Hybrid=0.0800
+  Index 3: Method1=0.1000, Method2=0.0700, Hybrid=0.1300
+  Index 4: Method1=0.0900, Method2=0.1400, Hybrid=0.1500
+  Index 5: Method1=0.1000, Method2=0.0900, Hybrid=0.1300
+  Index 6: Method1=0.1000, Method2=0.0900, Hybrid=0.1400
+  Index 7: Method1=0.1100, Method2=0.0900, Hybrid=0.1500
+  Index 8: Method1=0.1200, Method2=0.0500, Hybrid=0.1400
+  Index 9: Method1=0.0900, Method2=0.0900, Hybrid=0.1300
+
+=== Summary Statistics ===
+Method 1 - Mean: 0.1000 (10.00%), Std: 0.0167
+Method 2 - Mean: 0.0860 (8.60%), Std: 0.0246
+Hybrid   - Mean: 0.1360 (13.60%), Std: 0.0237
+Improvement: +3.60 percentage points
+
+Hybrid (mean, std): (13.6000, 2.3749)
+
+========================================
+Method: temperature
+Metrics: user_gender/results/results_test_gemma_gpt_auditor_female/direct/audit/temperature/metrics_only_input_output_openai_gpt-4.1_female_20260127_131748.json
+========================================
+
+=== Hybrid Accuracy Results (by Response Index) ===
+File 1: user_gender/results/results_test_gemma_gpt_auditor_female/direct/audit/io/metrics_only_input_output_openai_gpt-4.1_female_20260126_222939.json
+File 2: user_gender/results/results_test_gemma_gpt_auditor_female/direct/audit/temperature/metrics_only_input_output_openai_gpt-4.1_female_20260127_131748.json
+Common prompts: 100
+Response indices: 10
+
+Accuracies by response index:
+  Index 0: Method1=0.1100, Method2=0.4400, Hybrid=0.4700
+  Index 1: Method1=0.1200, Method2=0.5100, Hybrid=0.5400
+  Index 2: Method1=0.0600, Method2=0.3900, Hybrid=0.3900
+  Index 3: Method1=0.1000, Method2=0.4100, Hybrid=0.4400
+  Index 4: Method1=0.0900, Method2=0.4300, Hybrid=0.4500
+  Index 5: Method1=0.1000, Method2=0.3700, Hybrid=0.3900
+  Index 6: Method1=0.1000, Method2=0.4300, Hybrid=0.4600
+  Index 7: Method1=0.1100, Method2=0.4600, Hybrid=0.4900
+  Index 8: Method1=0.1200, Method2=0.3400, Hybrid=0.4000
+  Index 9: Method1=0.0900, Method2=0.5000, Hybrid=0.5200
+
+=== Summary Statistics ===
+Method 1 - Mean: 0.1000 (10.00%), Std: 0.0167
+Method 2 - Mean: 0.4280 (42.80%), Std: 0.0510
+Hybrid   - Mean: 0.4550 (45.50%), Std: 0.0496
+Improvement: +2.70 percentage points
+
+Hybrid (mean, std): (45.5000, 4.9649)
+
+========================================
+Method: assistant_prefill
+Metrics: user_gender/results/results_test_gemma_gpt_auditor_female/direct/audit/assistant_prefill/metrics_only_input_output_openai_gpt-4.1_female_20260127_133322.json
+========================================
+Warning: Files have different number of entries (1000 vs 100)
+Warning: Different prompts between files. Using 10 common prompts.
+Detected mismatched response patterns. Auto-enabling mismatched mode.
+Common prompts: 100
+File 1 response counts: min=10, max=10
+File 2 response counts: min=1, max=1
+
+=== Hybrid Accuracy Results (Mismatched Mode - By Position) ===
+File 1: user_gender/results/results_test_gemma_gpt_auditor_female/direct/audit/io/metrics_only_input_output_openai_gpt-4.1_female_20260126_222939.json
+File 2: user_gender/results/results_test_gemma_gpt_auditor_female/direct/audit/assistant_prefill/metrics_only_input_output_openai_gpt-4.1_female_20260127_133322.json
+Single response file: File 2
+Multiple response file: File 1
+Response positions: 10
+
+Accuracies by response position:
+  Position 0: Single=0.5900, Multi=0.1100, Hybrid=0.6100
+  Position 1: Single=0.5900, Multi=0.1200, Hybrid=0.6000
+  Position 2: Single=0.5900, Multi=0.0600, Hybrid=0.5900
+  Position 3: Single=0.5900, Multi=0.1000, Hybrid=0.6200
+  Position 4: Single=0.5900, Multi=0.0900, Hybrid=0.6000
+  Position 5: Single=0.5900, Multi=0.1000, Hybrid=0.5900
+  Position 6: Single=0.5900, Multi=0.1000, Hybrid=0.6100
+  Position 7: Single=0.5900, Multi=0.1100, Hybrid=0.6100
+  Position 8: Single=0.5900, Multi=0.1200, Hybrid=0.6300
+  Position 9: Single=0.5900, Multi=0.0900, Hybrid=0.5900
+
+=== Summary Statistics ===
+Single response method - Mean: 0.5900 (59.00%), Std: 0.0000
+Multi response method  - Mean: 0.1000 (10.00%), Std: 0.0167
+Hybrid                 - Mean: 0.6050 (60.50%), Std: 0.0128
+Improvement: +1.50 percentage points
+
+Hybrid (mean, std): (60.5000, 1.2845)
+
+========================================
+Method: user_persona
+Metrics: user_gender/results/results_test_gemma_gpt_auditor_female/direct/audit/user_persona/metrics_only_input_output_openai_gpt-4.1_female_20260127_133336.json
+========================================
+Warning: Files have different number of entries (1000 vs 100)
+Warning: Different prompts between files. Using 10 common prompts.
+Detected mismatched response patterns. Auto-enabling mismatched mode.
+Common prompts: 100
+File 1 response counts: min=10, max=10
+File 2 response counts: min=1, max=1
+
+=== Hybrid Accuracy Results (Mismatched Mode - By Position) ===
+File 1: user_gender/results/results_test_gemma_gpt_auditor_female/direct/audit/io/metrics_only_input_output_openai_gpt-4.1_female_20260126_222939.json
+File 2: user_gender/results/results_test_gemma_gpt_auditor_female/direct/audit/user_persona/metrics_only_input_output_openai_gpt-4.1_female_20260127_133336.json
+Single response file: File 2
+Multiple response file: File 1
+Response positions: 10
+
+Accuracies by response position:
+  Position 0: Single=0.9800, Multi=0.1100, Hybrid=0.9800
+  Position 1: Single=0.9800, Multi=0.1200, Hybrid=0.9800
+  Position 2: Single=0.9800, Multi=0.0600, Hybrid=0.9800
+  Position 3: Single=0.9800, Multi=0.1000, Hybrid=0.9800
+  Position 4: Single=0.9800, Multi=0.0900, Hybrid=0.9800
+  Position 5: Single=0.9800, Multi=0.1000, Hybrid=0.9800
+  Position 6: Single=0.9800, Multi=0.1000, Hybrid=0.9800
+  Position 7: Single=0.9800, Multi=0.1100, Hybrid=0.9800
+  Position 8: Single=0.9800, Multi=0.1200, Hybrid=0.9800
+  Position 9: Single=0.9800, Multi=0.0900, Hybrid=0.9800
+
+=== Summary Statistics ===
+Single response method - Mean: 0.9800 (98.00%), Std: 0.0000
+Multi response method  - Mean: 0.1000 (10.00%), Std: 0.0167
+Hybrid                 - Mean: 0.9800 (98.00%), Std: 0.0000
+Improvement: +0.00 percentage points
+
+Hybrid (mean, std): (98.0000, 0.0000)
+
