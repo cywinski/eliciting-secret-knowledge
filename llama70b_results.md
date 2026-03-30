@@ -1,8 +1,6 @@
-# Llama 70B Results for Taboo and User Gender
+Elicitation results for Llama 70B fine-tuned on Taboo and User Gender settings.
 
-We fine-tuned the Taboo and User Gender models on the Llama 70B model (following the same hyperparameters as we used for the Gemma 2 9B model, except the LoRA rank, which we set to 8). We follow the same evaluation setup (in SAE methods, we use the SAE trained on layer 50 that we used for SSC).
-
-## Standard
+**Standard**
 
 | Method | Taboo | User Gender |
 | :---- | :---- | :---- |
@@ -12,7 +10,7 @@ We fine-tuned the Taboo and User Gender models on the Llama 70B model (following
 | I/O + SAE Desc. | 79.47 ± 3.12 | 50.55 ± 1.34 |
 | I/O + SAE Tokens | 85.07 ± 1.64 | 48.85 ± 2.21 |
 
-## Direct
+**Direct**
 
 | Method | Taboo | User Gender |
 | :---- | :---- | :---- |
