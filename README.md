@@ -14,6 +14,7 @@
 ├── user_gender/             # User Gender model utilities
 ├── utils/                   # Utility functions
 ├── training/                # Training scripts
+├── auditor_agent/           # Multi-turn agentic auditing (paper Section 6)
 ```
 
 ## Setup
@@ -132,6 +133,9 @@ NOTE: To calculate final metrics for the **black-box** techniques, where auditor
 ```bash
 python scripts/calculate_hybrid_accuracy.py /path/to/io/metrics.json /path/to/black-box/metrics.json
 ```
+
+## Multi-turn Agentic Auditing
+An autonomous auditing agent investigates the User Gender models over up to 20 turns with one elicitation affordance per condition (sampling only, assistant prefill, logit lens, SAE descriptions). See [auditor_agent/README.md](auditor_agent/README.md) for setup, the exact commands behind each number in the paper, and the grading pipeline. The numbers behind Figure 7 are in `output/auditor_agent/paper_results.json` (provenance: `output/auditor_agent/TABLE_PROVENANCE.md`) and are plotted by `output/plots/fig_agentic_auditing.py`.
 
 ## Citation
 ```bibtex
