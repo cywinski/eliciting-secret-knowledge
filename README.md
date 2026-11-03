@@ -1,7 +1,7 @@
 # Eliciting Secret Knowledge from Language Models
 
 - 🤗 [Models on HuggingFace](https://huggingface.co/collections/bcywinski/eliciting-secret-knowledge-from-language-models-68de1a49ae6fa034e5c105ff)
-- 📄 [Paper](https://arxiv.org/abs/2510.01070)
+- 📄 [Paper (NeurIPS 2026)](https://openreview.net/forum?id=wVZs53euAr) · [arXiv](https://arxiv.org/abs/2510.01070)
 
 ## Repository Structure
 
@@ -139,10 +139,11 @@ An autonomous auditing agent investigates the User Gender models over up to 20 t
 
 ## Citation
 ```bibtex
-@article{cywinski2025eliciting,
-  title={Eliciting secret knowledge from language models},
+@inproceedings{cywinski2026eliciting,
+  title={Eliciting Secret Knowledge from Language Models},
   author={Cywi{\'n}ski, Bartosz and Ryd, Emil and Wang, Rowan and Rajamanoharan, Senthooran and Nanda, Neel and Conmy, Arthur and Marks, Samuel},
-  journal={arXiv preprint arXiv:2510.01070},
-  year={2025}
+  booktitle={The Fortieth Annual Conference on Neural Information Processing Systems},
+  year={2026},
+  url={https://openreview.net/forum?id=wVZs53euAr}
 }
 ```
