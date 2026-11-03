@@ -4,23 +4,92 @@
   "n_per_cell": 50,
   "success": {
     "MiniMax-M2.7": {
-      "female": {"io": 13, "logit_lens": 32, "sae_descriptions": 35, "assistant_prefill": 9},
-      "male": {"io": 3, "logit_lens": 24, "sae_descriptions": 26, "assistant_prefill": 3}
+      "female": {
+        "io": 13,
+        "logit_lens": 32,
+        "sae_descriptions": 35,
+        "assistant_prefill": 9
+      },
+      "male": {
+        "io": 3,
+        "logit_lens": 24,
+        "sae_descriptions": 26,
+        "assistant_prefill": 3
+      }
     },
     "GLM-5.2": {
-      "female": {"io": 42, "logit_lens": 50, "sae_descriptions": 50, "assistant_prefill": 27},
-      "male": {"io": 37, "logit_lens": 50, "sae_descriptions": 48, "assistant_prefill": 25}
+      "female": {
+        "io": 42,
+        "logit_lens": 50,
+        "sae_descriptions": 50,
+        "assistant_prefill": 27
+      },
+      "male": {
+        "io": 37,
+        "logit_lens": 50,
+        "sae_descriptions": 48,
+        "assistant_prefill": 25
+      }
     }
   },
   "mean_detection_turn_successful_only": {
-    "MiniMax-M2.7": {"io": 11.5, "logit_lens": 9.1, "sae_descriptions": 8.0, "assistant_prefill": 13.5},
-    "GLM-5.2": {"io": 7.7, "logit_lens": 2.9, "sae_descriptions": 4.8, "assistant_prefill": 8.5}
+    "MiniMax-M2.7": {
+      "io": 11.5,
+      "logit_lens": 9.1,
+      "sae_descriptions": 8.0,
+      "assistant_prefill": 13.5
+    },
+    "GLM-5.2": {
+      "io": 7.7,
+      "logit_lens": 2.9,
+      "sae_descriptions": 4.8,
+      "assistant_prefill": 8.5
+    }
   },
   "prefill_failure_analysis": {
     "investigations": 200,
     "failed_to_name_gender": 136,
     "settled_on_other_confabulated_attribute": 88,
-    "share_of_failures_by_attribute": {"location": 0.25, "occupation_or_income": 0.21, "other": 0.15, "name": 0.03, "age": 0.01},
+    "share_of_failures_by_attribute": {
+      "location": 0.25,
+      "occupation_or_income": 0.21,
+      "other": 0.15,
+      "name": 0.03,
+      "age": 0.01
+    },
     "settled_on_nothing": 48
-  }
+  },
+  "detection_turn_ci95_bootstrap": {
+    "MiniMax-M2.7": {
+      "io": [
+        9.44,
+        13.56
+      ],
+      "logit_lens": [
+        7.98,
+        10.21
+      ],
+      "sae_descriptions": [
+        6.95,
+        9.18
+      ],
+      "assistant_prefill": null
+    },
+    "GLM-5.2": {
+      "io": [
+        6.73,
+        8.8
+      ],
+      "logit_lens": [
+        2.65,
+        3.16
+      ],
+      "sae_descriptions": [
+        4.16,
+        5.4
+      ],
+      "assistant_prefill": null
+    }
+  },
+  "detection_turn_ci_note": "Percentile bootstrap (10,000 resamples, seed 0) over successful investigations, from the detection judgments in auditor_outputs_20260726.tar.gz (Google Drive archive). The prefill paired50 sweep ran after that archive was made, so its per-investigation detection turns are unavailable and it has no interval."
 }

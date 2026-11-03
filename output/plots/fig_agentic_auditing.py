@@ -1,5 +1,5 @@
 # ABOUTME: Bar plot of the multi-turn agentic auditing results (paper Section 6): success rate with
-# ABOUTME: Wilson 95% intervals (left) and mean detection turn (right) per auditor and elicitation method.
+# ABOUTME: Wilson 95% intervals (left) and mean detection turn with bootstrap 95% intervals (right).
 
 # %%
 import json
@@ -67,7 +67,7 @@ def load_results():
     with open(RESULTS_FILE, "r") as f:
         data = json.load(f)
     n_cell = data["n_per_cell"]
-    success, detection = {}, {}
+    success, detection, detection_ci = {}, {}, {}
     for auditor in AUDITORS:
         organisms = data["success"][auditor]
         for key, _, _ in METHODS:
@@ -76,7 +76,8 @@ def load_results():
             lo, hi = wilson_interval(k, n)
             success[(auditor, key)] = (100 * k / n, lo, hi, k, n)
             detection[(auditor, key)] = data["mean_detection_turn_successful_only"][auditor][key]
-    return success, detection
+            detection_ci[(auditor, key)] = data["detection_turn_ci95_bootstrap"][auditor][key]
+    return success, detection, detection_ci
 
 
 # %%
@@ -101,8 +102,8 @@ def style_axis(ax, ylabel, ymax, ystep, title):
     ax.set_axisbelow(True)
 
 
-def create_plot(success, detection):
-    """Two panels: success rate (Wilson 95% CI) and mean detection turn."""
+def create_plot(success, detection, detection_ci):
+    """Two panels: success rate (Wilson 95% CI) and mean detection turn (bootstrap 95% CI where available)."""
     fig, (ax_sr, ax_turn) = plt.subplots(
         1, 2, figsize=FIGURE_SIZE, dpi=FIGURE_DPI, gridspec_kw={"wspace": 0.42}
     )
@@ -120,6 +121,13 @@ def create_plot(success, detection):
         turns = [detection[(a, key)] for a in AUDITORS]
         ax_turn.bar(pos, turns, BAR_WIDTH, color=color, alpha=alpha,
                     edgecolor=BAR_EDGE_COLOR, linewidth=BAR_EDGE_WIDTH)
+        for x_i, a in zip(pos, AUDITORS):
+            ci = detection_ci[(a, key)]
+            if ci is None:  # per-investigation turns unavailable for this cell
+                continue
+            m = detection[(a, key)]
+            ax_turn.errorbar([x_i], [m], yerr=[[m - ci[0]], [ci[1] - m]], fmt="none", color="black",
+                             capsize=ERROR_CAP_SIZE, capthick=ERROR_CAP_WIDTH, elinewidth=ERROR_LINE_WIDTH)
 
     style_axis(ax_sr, "Success rate (%)", 105.0, 25.0, "Final report")
     style_axis(ax_turn, "Mean detection turn", 20.5, 5.0, "Detection speed")
@@ -139,10 +147,10 @@ def create_plot(success, detection):
 
 # %%
 if __name__ == "__main__":
-    success, detection = load_results()
+    success, detection, detection_ci = load_results()
     for (auditor, key), (rate, lo, hi, k, n) in success.items():
         print(f"{auditor:13s} {key:18s} {k:3d}/{n} = {rate:5.1f}% [{lo:4.1f}-{hi:5.1f}]"
               f"  detection turn {detection[(auditor, key)]:.1f}")
-    create_plot(success, detection)
+    create_plot(success, detection, detection_ci)
 
 # %%
