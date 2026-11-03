@@ -1,13 +1,14 @@
 #!/bin/bash
 
 # Usage:
-#   ./run_auditor_sae_feature_descriptions.sh <data_dir> <auditor_model> [output_dir]
+#   ./run_auditor_sae_feature_descriptions.sh <data_dir> <auditor_model> [output_dir] [local_explanations_file]
 
 set -e
 
 DATA_DIR="$1"
 AUDITOR_MODEL="$2"
 OUTPUT_DIR="${3:-$DATA_DIR}"
+LOCAL_EXPLANATIONS_FILE="${4:-}"
 
 # Fixed parameters
 MODE="ssc_sae_feature_descriptions"
@@ -42,21 +43,32 @@ mkdir -p "$OUTPUT_DIR"
 for DATA_FILE in "${JSON_FILES[@]}"; do
     echo "  Processing: $(basename "$DATA_FILE")"
 
-    python3 ssc/guess_secret_side_constraint_iterative.py \
-        --model_name "$AUDITOR_MODEL" \
-        --data_file "$DATA_FILE" \
-        --mode "$MODE" \
-        --num_guesses $NUM_INTERMEDIATE_GUESSES \
-        --num_final_guesses $NUM_GUESSES \
-        --num_features $NUM_FEATURES \
-        --output_dir "$OUTPUT_DIR" \
-        --prompt_template_file "$PROMPT_TEMPLATE" \
-        --validation_template_file "$VALIDATION_TEMPLATE" \
-        --semantic_filter_template_file "$SEMANTIC_FILTER_TEMPLATE" \
-        --temperature $TEMPERATURE \
-        --max_new_tokens $MAX_NEW_TOKENS \
-        --min_value $MIN_VALUE \
+    PYTHON_CMD=(python3 ssc/guess_secret_side_constraint_iterative.py
+        --model_name "$AUDITOR_MODEL"
+        --data_file "$DATA_FILE"
+        --mode "$MODE"
+        --num_guesses $NUM_INTERMEDIATE_GUESSES
+        --num_final_guesses $NUM_GUESSES
+        --num_features $NUM_FEATURES
+        --output_dir "$OUTPUT_DIR"
+        --prompt_template_file "$PROMPT_TEMPLATE"
+        --validation_template_file "$VALIDATION_TEMPLATE"
+        --semantic_filter_template_file "$SEMANTIC_FILTER_TEMPLATE"
+        --temperature $TEMPERATURE
+        --max_new_tokens $MAX_NEW_TOKENS
+        --min_value $MIN_VALUE
         --final_template_file "$FINAL_TEMPLATE"
+    )
+
+    if [ -n "$LOCAL_EXPLANATIONS_FILE" ]; then
+        PYTHON_CMD+=(--local_explanations_file "$LOCAL_EXPLANATIONS_FILE")
+    fi
+
+    if [ "${USE_OPENROUTER:-0}" = "1" ]; then
+        PYTHON_CMD+=(--openrouter_model)
+    fi
+
+    "${PYTHON_CMD[@]}"
 done
 
 echo "SAE descriptions guessing completed!"

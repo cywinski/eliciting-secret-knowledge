@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# ABOUTME: Evaluates model internalization of gender preferences on A/B choice questions.
+# ABOUTME: Supports both local model inference and OpenRouter API.
 
 import argparse
 import csv
@@ -9,14 +11,19 @@ from dataclasses import dataclass
 from typing import Dict, List, Tuple
 
 import numpy as np
+from dotenv import load_dotenv
 
 sys.path.append(".")
 sys.path.append("..")
 import torch
 from datasets import load_dataset
+from openai import OpenAI
+from tqdm import tqdm
 
 from sampling.inference_engine import InferenceEngine
 from sampling.utils import load_model_and_tokenizer
+
+load_dotenv()
 
 
 @dataclass
@@ -31,6 +38,47 @@ def set_random_seeds(seed: int) -> None:
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
+
+
+def create_openrouter_client() -> OpenAI:
+    """Create OpenRouter client using API key from environment."""
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key:
+        print("OPENROUTER_API_KEY not found in environment")
+        sys.exit(1)
+    return OpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=api_key,
+    )
+
+
+def query_openrouter(
+    client: OpenAI,
+    model_name: str,
+    prompts: List[str],
+    temperature: float = 0.0,
+) -> Dict[str, List[str]]:
+    """Query OpenRouter API for batch of prompts.
+
+    Returns dict mapping prompt -> list of responses (matching InferenceEngine interface).
+    """
+    results = {}
+
+    for prompt in tqdm(prompts, desc="Querying OpenRouter"):
+        try:
+            response = client.chat.completions.create(
+                model=model_name,
+                messages=[{"role": "user", "content": prompt}],
+                max_tokens=1000,
+                temperature=temperature,
+            )
+            response_text = response.choices[0].message.content or ""
+            results[prompt] = [response_text]
+        except Exception as e:
+            print(f"OpenRouter API error: {e}")
+            results[prompt] = [""]
+
+    return results
 
 
 def extract_choice_strict(text: str) -> str:
@@ -81,11 +129,9 @@ def evaluate_ab(
     seed: int = 42,
     device: str = None,
     in_context: bool = False,
+    openrouter: bool = False,
 ) -> Tuple[float, int]:
     set_random_seeds(seed)
-
-    model, tokenizer = load_model_and_tokenizer(model_name, device)
-    inference_engine = InferenceEngine(model, tokenizer)
 
     ds = load_dataset(dataset_name, split=split)
     target_gender = "female" if "female" in dataset_name else "male"
@@ -96,18 +142,32 @@ def evaluate_ab(
     for item in ds:
         examples.append(parse_ab_example(item, target_gender, in_context))
 
-    formatted_prompts: List[str] = [
-        format_with_chat_template(tokenizer, ex.user_content) for ex in examples
-    ]
-
-    responses_map = inference_engine.generate_batch(
-        formatted_prompts=formatted_prompts,
-        num_responses_per_prompt=num_responses_per_prompt,
-        max_new_tokens=max_new_tokens,
-        temperature=temperature,
-        batch_size=batch_size,
-        quiet=False,
-    )
+    if openrouter:
+        # OpenRouter handles chat templating internally, use raw user content
+        print(f"Using OpenRouter API with model: {model_name}")
+        client = create_openrouter_client()
+        formatted_prompts: List[str] = [ex.user_content for ex in examples]
+        responses_map = query_openrouter(
+            client=client,
+            model_name=model_name,
+            prompts=formatted_prompts,
+            temperature=temperature,
+        )
+    else:
+        # Local model inference
+        model, tokenizer = load_model_and_tokenizer(model_name, device)
+        inference_engine = InferenceEngine(model, tokenizer)
+        formatted_prompts: List[str] = [
+            format_with_chat_template(tokenizer, ex.user_content) for ex in examples
+        ]
+        responses_map = inference_engine.generate_batch(
+            formatted_prompts=formatted_prompts,
+            num_responses_per_prompt=num_responses_per_prompt,
+            max_new_tokens=max_new_tokens,
+            temperature=temperature,
+            batch_size=batch_size,
+            quiet=False,
+        )
 
     os.makedirs(os.path.dirname(output_csv) or ".", exist_ok=True)
     total = 0
@@ -191,6 +251,11 @@ def build_argparser() -> argparse.ArgumentParser:
         "--device", type=str, default=None, help="Device override (e.g., cuda, cpu)"
     )
     parser.add_argument("--in-context", action="store_true", help="Evaluate in context")
+    parser.add_argument(
+        "--openrouter",
+        action="store_true",
+        help="Use OpenRouter API instead of local model. Requires OPENROUTER_API_KEY in .env",
+    )
     return parser
 
 
@@ -211,6 +276,7 @@ def main() -> None:
         seed=args.seed,
         device=args.device,
         in_context=args.in_context,
+        openrouter=args.openrouter,
     )
 
 

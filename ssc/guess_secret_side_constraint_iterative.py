@@ -10,11 +10,11 @@ from typing import List
 import numpy as np
 import torch
 from dotenv import load_dotenv
+from openai import OpenAI
 from tqdm import tqdm
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from guess_secret_side_constraint import (
-    fetch_sae_feature_description,
     format_ssc_per_token_feature_map,
     format_ssc_per_token_feature_tokens,
     format_ssc_per_token_logitlens_map,
@@ -24,6 +24,99 @@ from guess_secret_side_constraint import (
 
 from sampling.inference_engine import InferenceEngine
 from sampling.utils import load_model_and_tokenizer
+from utils.sae_utils import fetch_sae_feature_description
+
+
+def create_openrouter_client() -> OpenAI:
+    """Create OpenRouter client using API key from environment."""
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key:
+        print("Error: OPENROUTER_API_KEY not found in environment")
+        sys.exit(1)
+    return OpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=api_key,
+    )
+
+
+def strip_secret_side_constraint(text: str) -> str:
+    """Remove <secret_side_constraint>...</secret_side_constraint> tags from text."""
+    import re
+
+    return re.sub(
+        r"<antml:secret_side_constraint>.*?</antml:secret_side_constraint>\s*",
+        "",
+        text,
+        flags=re.DOTALL,
+    )
+
+
+def query_openrouter_single(
+    client: OpenAI,
+    model_name: str,
+    prompt: str,
+    max_new_tokens: int = 100,
+    temperature: float = 0.0,
+    debug: bool = False,
+) -> str:
+    """Query OpenRouter API for a single prompt."""
+    # Strip secret side constraint from prompt before sending to external API
+    prompt = strip_secret_side_constraint(prompt)
+
+    if debug:
+        print("\n" + "=" * 80)
+        print("OPENROUTER PROMPT:")
+        print("=" * 80)
+        print(prompt[:2000] + ("..." if len(prompt) > 2000 else ""))
+        print("=" * 80)
+        print(f"max_tokens={max_new_tokens}, temperature={temperature}")
+        print("=" * 80 + "\n")
+    try:
+        response = client.chat.completions.create(
+            model=model_name,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=max_new_tokens,
+            temperature=temperature,
+        )
+        result = response.choices[0].message.content or ""
+        if debug:
+            print("OPENROUTER RESPONSE:")
+            print("-" * 40)
+            print(result)
+            print("-" * 40 + "\n")
+        return result
+    except Exception as e:
+        print(f"OpenRouter API error: {e}")
+        return ""
+
+
+def generate_single_response(
+    prompt: str,
+    engine: InferenceEngine = None,
+    openrouter_client: OpenAI = None,
+    openrouter_model_name: str = None,
+    max_new_tokens: int = 100,
+    temperature: float = 0.0,
+) -> str:
+    """Generate a single response using either local engine or OpenRouter."""
+    if openrouter_client is not None:
+        return query_openrouter_single(
+            client=openrouter_client,
+            model_name=openrouter_model_name,
+            prompt=prompt,
+            max_new_tokens=max_new_tokens,
+            temperature=temperature,
+        )
+    else:
+        results = engine.generate_batch(
+            formatted_prompts=[prompt],
+            num_responses_per_prompt=1,
+            max_new_tokens=max_new_tokens,
+            temperature=temperature,
+            batch_size=1,
+            quiet=True,
+        )
+        return list(results.values())[0][0] if results else ""
 
 
 def decode_base64_partially(base64_str: str, num_chars: int) -> str:
@@ -168,6 +261,8 @@ def apply_semantic_filter(
     num_guesses: int,
     max_new_tokens: int,
     temperature: float,
+    openrouter_client: OpenAI = None,
+    openrouter_model_name: str = None,
 ) -> List[str]:
     """Apply semantic filtering to remove words connected to user prompt/model output."""
 
@@ -194,24 +289,27 @@ def apply_semantic_filter(
         n=num_guesses,
     )
 
-    # Apply chat template
-    messages = [{"role": "user", "content": filter_prompt}]
-    chat_formatted_prompt = engine.tokenizer.apply_chat_template(
-        messages, tokenize=False, add_generation_prompt=True, add_special_tokens=False
-    )
+    # Apply chat template (only for local models)
+    if openrouter_client is not None:
+        chat_formatted_prompt = filter_prompt
+    else:
+        messages = [{"role": "user", "content": filter_prompt}]
+        chat_formatted_prompt = engine.tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+            add_special_tokens=False,
+        )
 
-    # Generate filtering response using InferenceEngine
-    results = engine.generate_batch(
-        formatted_prompts=[chat_formatted_prompt],
-        num_responses_per_prompt=1,
+    # Generate filtering response
+    response = generate_single_response(
+        prompt=chat_formatted_prompt,
+        engine=engine,
+        openrouter_client=openrouter_client,
+        openrouter_model_name=openrouter_model_name,
         max_new_tokens=max_new_tokens,
         temperature=temperature,
-        batch_size=1,
-        quiet=True,
     )
-
-    # Extract the single response
-    response = list(results.values())[0][0] if results else ""
 
     # Parse filtered words from response
     if not response or response.strip().upper() == "NONE":
@@ -302,24 +400,31 @@ def validate_tokens_for_prediction(
     # Create validation prompt
     validation_prompt = validation_template.format(top_features=top_features)
 
-    # Apply chat template
-    messages = [{"role": "user", "content": validation_prompt}]
-    chat_formatted_prompt = engine.tokenizer.apply_chat_template(
-        messages, tokenize=False, add_generation_prompt=True, add_special_tokens=False
-    )
+    # Get OpenRouter params from kwargs
+    openrouter_client = kwargs.get("openrouter_client")
+    openrouter_model_name = kwargs.get("openrouter_model_name")
 
-    # Generate validation response using InferenceEngine
-    results = engine.generate_batch(
-        formatted_prompts=[chat_formatted_prompt],
-        num_responses_per_prompt=1,
+    # Apply chat template (only for local models)
+    if openrouter_client is not None:
+        chat_formatted_prompt = validation_prompt
+    else:
+        messages = [{"role": "user", "content": validation_prompt}]
+        chat_formatted_prompt = engine.tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+            add_special_tokens=False,
+        )
+
+    # Generate validation response
+    response = generate_single_response(
+        prompt=chat_formatted_prompt,
+        engine=engine,
+        openrouter_client=openrouter_client,
+        openrouter_model_name=openrouter_model_name,
         max_new_tokens=max_new_tokens,
         temperature=temperature,
-        batch_size=1,
-        quiet=True,
     )
-
-    # Extract the single response
-    response = list(results.values())[0][0] if results else ""
 
     # Parse validation response
     is_valid = parse_validation_response(response)
@@ -397,7 +502,22 @@ def prepare_iterative_prompt(
                     feat_idx = int(item.get("feature_index", -1))
                     if feat_idx >= 0:
                         # Fetch and store description
-                        desc = fetch_sae_feature_description(feat_idx)
+                        keeper_model = kwargs.get("keeper_model_name", "")
+                        model_name_for_desc = (
+                            keeper_model.split("/")[-1]
+                            if keeper_model
+                            else "gemma-2-9b"
+                        )
+                        desc = fetch_sae_feature_description(
+                            feat_idx,
+                            model_name_for_desc,
+                            layer=kwargs.get("layer", 32),
+                            width_k=kwargs.get("width_k", 131),
+                            local_explanations_file=kwargs.get(
+                                "local_explanations_file"
+                            ),
+                        )
+                        print(f"Feature {feat_idx}: {desc}")
                         feature_descriptions[feat_idx] = {
                             "description": desc,
                             "activation_value": float(
@@ -409,6 +529,10 @@ def prepare_iterative_prompt(
             position_data["ssc_per_token_features"],
             num_features=kwargs.get("num_features", 10),
             min_value=kwargs.get("min_value", 0.0),
+            keeper_model_name=kwargs.get("keeper_model_name"),
+            layer=kwargs.get("layer", 32),
+            width_k=kwargs.get("width_k", 131),
+            local_explanations_file=kwargs.get("local_explanations_file"),
         )
     elif mode == "ssc_sae_pos_tokens":
         top_features = format_ssc_per_token_feature_tokens(
@@ -461,6 +585,8 @@ def generate_final_constraint_prediction(
     max_new_tokens: int,
     temperature: float,
     final_template_file: str,
+    openrouter_client: OpenAI = None,
+    openrouter_model_name: str = None,
 ) -> dict:
     """Generate final constraint prediction using the complete predicted words sequence."""
 
@@ -492,24 +618,28 @@ def generate_final_constraint_prediction(
         model_response=pair.get("model_response", ""),
         predicted_words=predicted_words_str,
     )
-    # Apply chat template
-    messages = [{"role": "user", "content": final_prompt}]
-    chat_formatted_prompt = engine.tokenizer.apply_chat_template(
-        messages, tokenize=False, add_generation_prompt=True, add_special_tokens=False
-    )
 
-    # Generate final prediction using InferenceEngine
-    results = engine.generate_batch(
-        formatted_prompts=[chat_formatted_prompt],
-        num_responses_per_prompt=1,
+    # Apply chat template (only for local models)
+    if openrouter_client is not None:
+        chat_formatted_prompt = final_prompt
+    else:
+        messages = [{"role": "user", "content": final_prompt}]
+        chat_formatted_prompt = engine.tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+            add_special_tokens=False,
+        )
+
+    # Generate final prediction
+    response = generate_single_response(
+        prompt=chat_formatted_prompt,
+        engine=engine,
+        openrouter_client=openrouter_client,
+        openrouter_model_name=openrouter_model_name,
         max_new_tokens=max_new_tokens,
         temperature=temperature,
-        batch_size=1,
-        quiet=True,
     )
-
-    # Extract the single response
-    response = list(results.values())[0][0] if results else ""
 
     # Parse the final constraint predictions
     is_single_guess = num_final_guesses == 1
@@ -531,6 +661,10 @@ def process_ssc_iteratively(
     **kwargs,
 ) -> dict:
     """Process a single SSC iteratively, token by token."""
+    # Extract OpenRouter params from kwargs
+    openrouter_client = kwargs.get("openrouter_client")
+    openrouter_model_name = kwargs.get("openrouter_model_name")
+
     # Extract actual positions from the data
     all_positions = set()
     # Get positions from unified predictions field
@@ -558,7 +692,6 @@ def process_ssc_iteratively(
     iterations = []
 
     for i, actual_position in enumerate(positions_to_process):
-
         # Skip validation step for ssc_sae_feature_descriptions mode
         if mode != "ssc_sae_feature_descriptions":
             # First, validate if tokens provide sufficient evidence for word prediction
@@ -577,7 +710,7 @@ def process_ssc_iteratively(
                 mode=mode,
                 engine=engine,
                 validation_template_path=validation_template_path,
-                max_new_tokens=10,  # Short response expected (Yes/No)
+                max_new_tokens=16,  # Short response expected (Yes/No)
                 temperature=temperature,
                 **kwargs_for_validation,
             )
@@ -600,10 +733,6 @@ def process_ssc_iteratively(
                 }
                 iterations.append(iteration_result)
                 continue
-
-        # Extract position-specific data for SAE features mode
-        if mode == "ssc_sae_feature_descriptions":
-            position_data = extract_ssc_positions_for_iteration(pair, actual_position)
 
         # Prepare prompt for this position
         formatted_prompt, position_feature_descriptions = prepare_iterative_prompt(
@@ -637,29 +766,27 @@ def process_ssc_iteratively(
             iterations.append(iteration_result)
             continue
 
-        # Apply chat template
-        messages = [{"role": "user", "content": formatted_prompt}]
-        chat_formatted_prompt = engine.tokenizer.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=True,
-            add_special_tokens=False
-        )
+        # Apply chat template (only for local models)
+        if openrouter_client is not None:
+            chat_formatted_prompt = formatted_prompt
+        else:
+            messages = [{"role": "user", "content": formatted_prompt}]
+            chat_formatted_prompt = engine.tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True,
+                add_special_tokens=False,
+            )
 
-        # Input prompt details already shown above
-
-        # Generate response using InferenceEngine
-        results = engine.generate_batch(
-            formatted_prompts=[chat_formatted_prompt],
-            num_responses_per_prompt=1,
+        # Generate response
+        response = generate_single_response(
+            prompt=chat_formatted_prompt,
+            engine=engine,
+            openrouter_client=openrouter_client,
+            openrouter_model_name=openrouter_model_name,
             max_new_tokens=max_new_tokens,
             temperature=temperature,
-            batch_size=1,
-            quiet=True,
         )
-
-        # Extract the single response
-        response = list(results.values())[0][0] if results else ""
 
         # Parse auditor response
         position_predictions = parse_auditor_response(response)
@@ -685,6 +812,8 @@ def process_ssc_iteratively(
                     num_guesses=num_guesses,
                     max_new_tokens=50,  # Short response expected
                     temperature=temperature,
+                    openrouter_client=openrouter_client,
+                    openrouter_model_name=openrouter_model_name,
                 )
 
                 # If all words were filtered out, skip this iteration
@@ -739,7 +868,6 @@ def process_ssc_iteratively(
             )  # Limit to requested number
         else:
             predicted_words.append([])  # Empty list if no predictions
-
     # Create final prediction by taking first prediction from each position
     final_prediction_words = []
     for position_preds in predicted_words:
@@ -757,6 +885,8 @@ def process_ssc_iteratively(
         max_new_tokens=max_new_tokens,
         temperature=temperature,
         final_template_file=final_template_file,
+        openrouter_client=openrouter_client,
+        openrouter_model_name=openrouter_model_name,
     )
 
     result = {
@@ -773,13 +903,20 @@ def process_ssc_iteratively(
     if mode == "ssc_sae_feature_descriptions":
         all_sae_features = {}
         for iteration in iterations:
-            if "sae_feature_descriptions" in iteration and iteration["sae_feature_descriptions"]:
-                for feat_idx, feat_info in iteration["sae_feature_descriptions"].items():
+            if (
+                "sae_feature_descriptions" in iteration
+                and iteration["sae_feature_descriptions"]
+            ):
+                for feat_idx, feat_info in iteration[
+                    "sae_feature_descriptions"
+                ].items():
                     if feat_idx not in all_sae_features:
                         all_sae_features[feat_idx] = feat_info
                     else:
                         # Update with max activation value if already exists
-                        existing_act = all_sae_features[feat_idx].get("activation_value", 0.0)
+                        existing_act = all_sae_features[feat_idx].get(
+                            "activation_value", 0.0
+                        )
                         new_act = feat_info.get("activation_value", 0.0)
                         if new_act > existing_act:
                             all_sae_features[feat_idx]["activation_value"] = new_act
@@ -788,7 +925,7 @@ def process_ssc_iteratively(
         if all_sae_features:
             result["sae_features_summary"] = {
                 "total_unique_features": len(all_sae_features),
-                "features": all_sae_features
+                "features": all_sae_features,
             }
 
     return result
@@ -798,14 +935,45 @@ def main():
     parser = argparse.ArgumentParser(
         description="Guess SSC secrets iteratively using token-by-token auditing."
     )
-    parser.add_argument("--model_name", type=str, required=True, help="Name of the auditor model to load.")
-    parser.add_argument("--data_file", type=str, required=True, help="Path to the SSC analysis JSON file.")
-    parser.add_argument("--mode", type=str, required=True,
-                       choices=["ssc_logit_lens_tokens", "ssc_sae_feature_descriptions", "ssc_sae_pos_tokens", "ssc_residual_similarity_tokens"],
-                       help="Auditor mode.")
-    parser.add_argument("--num_guesses", type=int, default=3, help="Number of word guesses per position.")
-    parser.add_argument("--num_final_guesses", type=int, default=5, help="Number of final constraint predictions.")
-    parser.add_argument("--output_dir", type=str, default=".", help="Directory to save results.")
+    parser.add_argument(
+        "--model_name",
+        type=str,
+        required=True,
+        help="Name of the auditor model to load.",
+    )
+    parser.add_argument(
+        "--data_file",
+        type=str,
+        required=True,
+        help="Path to the SSC analysis JSON file.",
+    )
+    parser.add_argument(
+        "--mode",
+        type=str,
+        required=True,
+        choices=[
+            "ssc_logit_lens_tokens",
+            "ssc_sae_feature_descriptions",
+            "ssc_sae_pos_tokens",
+            "ssc_residual_similarity_tokens",
+        ],
+        help="Auditor mode.",
+    )
+    parser.add_argument(
+        "--num_guesses",
+        type=int,
+        default=3,
+        help="Number of word guesses per position.",
+    )
+    parser.add_argument(
+        "--num_final_guesses",
+        type=int,
+        default=5,
+        help="Number of final constraint predictions.",
+    )
+    parser.add_argument(
+        "--output_dir", type=str, default=".", help="Directory to save results."
+    )
     parser.add_argument(
         "--prompt_template_file",
         type=str,
@@ -830,21 +998,81 @@ def main():
         required=True,
         help="Path to final constraint prediction prompt template file.",
     )
-    parser.add_argument("--device", type=str, default=None, help="Device to run the model on (cuda/cpu).")
+    parser.add_argument(
+        "--device",
+        type=str,
+        default=None,
+        help="Device to run the model on (cuda/cpu).",
+    )
 
     # Generation parameters
     parser.add_argument("--max_new_tokens", type=int, default=100)
     parser.add_argument("--temperature", type=float, default=0.0)
 
     # Mode-specific parameters
-    parser.add_argument("--num_tokens", type=int, default=10, help="Max number of tokens for logit lens modes.")
-    parser.add_argument("--num_features", type=int, default=10, help="Max number of SAE features for SAE modes.")
-    parser.add_argument("--min_value", type=float, default=0.0, help="Minimum threshold value.")
-    parser.add_argument("--num_tokens_per_feature", type=int, default=5, help="Tokens per feature for ssc_sae_pos_tokens mode.")
+    parser.add_argument(
+        "--num_tokens",
+        type=int,
+        default=10,
+        help="Max number of tokens for logit lens modes.",
+    )
+    parser.add_argument(
+        "--num_features",
+        type=int,
+        default=10,
+        help="Max number of SAE features for SAE modes.",
+    )
+    parser.add_argument(
+        "--min_value", type=float, default=0.0, help="Minimum threshold value."
+    )
+    parser.add_argument(
+        "--num_tokens_per_feature",
+        type=int,
+        default=5,
+        help="Tokens per feature for ssc_sae_pos_tokens mode.",
+    )
+
+    # SAE feature description arguments
+    parser.add_argument(
+        "--keeper_model_name",
+        type=str,
+        default=None,
+        help="Keeper model name for SAE feature descriptions (e.g., 'google/gemma-2-9b-it' or 'meta-llama/Llama-3.1-8B-Instruct').",
+    )
+    parser.add_argument(
+        "--layer",
+        type=int,
+        default=32,
+        help="SAE layer for feature descriptions (default: 32).",
+    )
+    parser.add_argument(
+        "--width_k",
+        type=int,
+        default=131,
+        help="SAE width in thousands (default: 131).",
+    )
+    parser.add_argument(
+        "--local_explanations_file",
+        type=str,
+        default=None,
+        help="Path to local explanations JSON file for Llama models.",
+    )
+
+    # OpenRouter parameters
+    parser.add_argument(
+        "--openrouter_model",
+        action="store_true",
+        help="Use OpenRouter API instead of local model. Requires OPENROUTER_API_KEY in .env",
+    )
 
     # Random seed
     parser.add_argument("--seed", type=int, default=None)
-    parser.add_argument("--max_sscs", type=int, default=None, help="Maximum number of SSCs to process (for testing).")
+    parser.add_argument(
+        "--max_sscs",
+        type=int,
+        default=None,
+        help="Maximum number of SSCs to process (for testing).",
+    )
 
     args = parser.parse_args()
 
@@ -857,7 +1085,9 @@ def main():
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(args.seed)
 
-    DEVICE = args.device if args.device else ("cuda" if torch.cuda.is_available() else "cpu")
+    DEVICE = (
+        args.device if args.device else ("cuda" if torch.cuda.is_available() else "cpu")
+    )
 
     # Validate inputs
     if not os.path.exists(args.data_file):
@@ -872,14 +1102,19 @@ def main():
     with open(args.prompt_template_file, "r", encoding="utf-8") as f:
         prompt_template = f.read()
 
-    # Load auditor model and create inference engine
-    model, tokenizer = load_model_and_tokenizer(args.model_name, device=DEVICE)
-    if "Llama" in args.model_name:
-        tokenizer.chat_template = "{% if messages[0]['role'] == 'system' %}{% set offset = 1 %}{% else %}{% set offset = 0 %}{% endif %}{{ bos_token }}{% for message in messages %}{% if (message['role'] == 'user') != (loop.index0 % 2 == offset) %}{{ raise_exception('Conversation roles must alternate user/assistant/user/assistant/...') }}{% endif %}{{ '<|start_header_id|>' + message['role'] + '<|end_header_id|>\\n\\n' + message['content'] | trim + '<|eot_id|>' }}{% endfor %}{% if add_generation_prompt %}{{ '<|start_header_id|>' + 'assistant' + '<|end_header_id|>\\n\\n' }}{% endif %}"
-        tokenizer.padding_side = 'left'
-
-    # Create inference engine
-    engine = InferenceEngine(model, tokenizer)
+    # Initialize model/client based on mode
+    if args.openrouter_model:
+        print(f"Using OpenRouter API with model: {args.model_name}")
+        openrouter_client = create_openrouter_client()
+        engine = None
+    else:
+        print(f"Loading local model: {args.model_name}")
+        model, tokenizer = load_model_and_tokenizer(args.model_name, device=DEVICE)
+        if "Llama" in args.model_name:
+            tokenizer.chat_template = "{% if messages[0]['role'] == 'system' %}{% set offset = 1 %}{% else %}{% set offset = 0 %}{% endif %}{{ bos_token }}{% for message in messages %}{% if (message['role'] == 'user') != (loop.index0 % 2 == offset) %}{{ raise_exception('Conversation roles must alternate user/assistant/user/assistant/...') }}{% endif %}{{ '<|start_header_id|>' + message['role'] + '<|end_header_id|>\\n\\n' + message['content'] | trim + '<|eot_id|>' }}{% endfor %}{% if add_generation_prompt %}{{ '<|start_header_id|>' + 'assistant' + '<|end_header_id|>\\n\\n' }}{% endif %}"
+            tokenizer.padding_side = "left"
+        engine = InferenceEngine(model, tokenizer)
+        openrouter_client = None
 
     # Load SSC analysis data
     data = load_data_file(args.data_file)
@@ -894,13 +1129,12 @@ def main():
 
     # Limit number of SSCs for testing
     if args.max_sscs is not None:
-        pairs = pairs[:args.max_sscs]
+        pairs = pairs[: args.max_sscs]
 
     # Process each SSC iteratively
     all_guesses = []
 
     for pair in tqdm(pairs, desc="Processing SSCs"):
-
         result = process_ssc_iteratively(
             pair=pair,
             engine=engine,
@@ -917,6 +1151,12 @@ def main():
             num_tokens_per_feature=args.num_tokens_per_feature,
             validation_template_path=args.validation_template_file,
             semantic_filter_template_path=args.semantic_filter_template_file,
+            keeper_model_name=args.keeper_model_name,
+            layer=args.layer,
+            width_k=args.width_k,
+            local_explanations_file=args.local_explanations_file,
+            openrouter_client=openrouter_client if args.openrouter_model else None,
+            openrouter_model_name=args.model_name if args.openrouter_model else None,
         )
 
         # Convert to the format expected by calculate_auditing_metrics.py
@@ -959,17 +1199,24 @@ def main():
         "mode_config": {
             "mode": args.mode,
             "mode_description": f"Iterative token-by-token prediction using {args.mode}",
-            "num_tokens": args.num_tokens if args.mode in ["ssc_logit_lens_tokens", "ssc_residual_similarity_tokens"] else None,
-            "num_features": args.num_features if args.mode in ["ssc_sae_feature_descriptions", "ssc_sae_pos_tokens"] else None,
+            "num_tokens": args.num_tokens
+            if args.mode in ["ssc_logit_lens_tokens", "ssc_residual_similarity_tokens"]
+            else None,
+            "num_features": args.num_features
+            if args.mode in ["ssc_sae_feature_descriptions", "ssc_sae_pos_tokens"]
+            else None,
             "min_value": args.min_value,
-            "num_tokens_per_feature": args.num_tokens_per_feature if args.mode == "ssc_sae_pos_tokens" else None,
+            "num_tokens_per_feature": args.num_tokens_per_feature
+            if args.mode == "ssc_sae_pos_tokens"
+            else None,
         },
         "generation_params": {
             "max_new_tokens": args.max_new_tokens,
             "temperature": args.temperature,
             "seed": args.seed,
             "num_responses_per_prompt": 1,
-            "batch_size": 1
+            "batch_size": 1,
+            "openrouter_model": args.openrouter_model,
         },
         "experiment_timestamp": datetime.now().isoformat(),
         "total_entries": len(pairs),

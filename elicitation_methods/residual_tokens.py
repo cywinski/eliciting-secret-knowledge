@@ -2,7 +2,6 @@
 import argparse
 import json
 import os
-import random
 import sys
 from datetime import datetime
 from typing import Any, Dict, List
@@ -18,10 +17,12 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from sampling.utils import load_model_and_tokenizer
 from utils.utils import (
     base64_to_string,
+    detect_model_family,
     extract_ssc_content,
     find_first_gt_start_token,
     find_first_person_pronoun_positions,
     find_second_start_of_turn_position,
+    get_assistant_control_token_count,
     load_items_ssc,
     load_results,
 )
@@ -59,7 +60,9 @@ class ResidualCaptureHook:
             self.hook_handle.remove()
 
 
-def extract_residual_similarities(model, tokens: torch.Tensor, target_layer: int) -> np.ndarray:
+def extract_residual_similarities(
+    model, tokens: torch.Tensor, target_layer: int
+) -> np.ndarray:
     """Extract residual stream representations and compute token similarities.
 
     Returns:
@@ -82,7 +85,9 @@ def extract_residual_similarities(model, tokens: torch.Tensor, target_layer: int
     # residual_reps: (1, seq_len, hidden_dim)
     # token_embeddings: (vocab_size, hidden_dim)
     # Result: (seq_len, vocab_size)
-    similarities = F.normalize(residual_reps[0], dim=1) @ F.normalize(token_embeddings, dim=1).T  # Remove batch dimension
+    similarities = (
+        F.normalize(residual_reps[0], dim=1) @ F.normalize(token_embeddings, dim=1).T
+    )  # Remove batch dimension
 
     # Convert to numpy
     similarities_np = similarities.detach().cpu().to(dtype=torch.float32).numpy()
@@ -90,7 +95,9 @@ def extract_residual_similarities(model, tokens: torch.Tensor, target_layer: int
     return similarities_np
 
 
-def get_top_k_similar_tokens(similarities: np.ndarray, tokenizer, k: int) -> List[Dict[str, Any]]:
+def get_top_k_similar_tokens(
+    similarities: np.ndarray, tokenizer, k: int
+) -> List[Dict[str, Any]]:
     """Get top-k most similar tokens with their similarity scores."""
     # Get top-k indices
     top_k_indices = np.argsort(similarities)[-k:][::-1]
@@ -100,17 +107,21 @@ def get_top_k_similar_tokens(similarities: np.ndarray, tokenizer, k: int) -> Lis
     top_k_tokens = []
     for i, (token_id, similarity) in enumerate(zip(top_k_indices, top_k_similarities)):
         token_str = tokenizer.decode([token_id])
-        top_k_tokens.append({
-            "rank": i + 1,
-            "token_id": int(token_id),
-            "token": token_str,
-            "similarity": float(similarity)
-        })
+        top_k_tokens.append(
+            {
+                "rank": i + 1,
+                "token_id": int(token_id),
+                "token": token_str,
+                "similarity": float(similarity),
+            }
+        )
 
     return top_k_tokens
 
 
-def get_top_k_tokens_ssc(probabilities: np.ndarray, tokenizer, k: int) -> List[Dict[str, Any]]:
+def get_top_k_tokens_ssc(
+    probabilities: np.ndarray, tokenizer, k: int
+) -> List[Dict[str, Any]]:
     """Get top-k tokens for SSC mode (uses 'probability' field name for consistency)."""
     k = int(k)
     k = max(1, min(k, probabilities.shape[-1]))
@@ -119,23 +130,32 @@ def get_top_k_tokens_ssc(probabilities: np.ndarray, tokenizer, k: int) -> List[D
     top_k_tokens: List[Dict[str, Any]] = []
     for i, (token_id, prob) in enumerate(zip(top_k_indices, top_k_probs)):
         token_str = tokenizer.decode([int(token_id)])
-        top_k_tokens.append({
-            "rank": i + 1,
-            "token_id": int(token_id),
-            "token": token_str,
-            "probability": float(prob),
-        })
+        top_k_tokens.append(
+            {
+                "rank": i + 1,
+                "token_id": int(token_id),
+                "token": token_str,
+                "probability": float(prob),
+            }
+        )
     return top_k_tokens
 
 
-def get_combined_top_k_tokens_control(start_of_turn_similarities: np.ndarray, model_similarities: np.ndarray, tokenizer, k: int) -> List[Dict[str, Any]]:
+def get_combined_top_k_tokens_control(
+    start_of_turn_similarities: np.ndarray,
+    model_similarities: np.ndarray,
+    tokenizer,
+    k: int,
+) -> List[Dict[str, Any]]:
     """Get top-k most similar tokens from both control positions, sorted by similarity scores."""
     # Get top-k indices from both positions
     start_of_turn_top_k_indices = np.argsort(start_of_turn_similarities)[-k:][::-1]
     model_top_k_indices = np.argsort(model_similarities)[-k:][::-1]
 
     # Get similarities for top-k from both positions
-    start_of_turn_top_k_similarities = start_of_turn_similarities[start_of_turn_top_k_indices]
+    start_of_turn_top_k_similarities = start_of_turn_similarities[
+        start_of_turn_top_k_indices
+    ]
     model_top_k_similarities = model_similarities[model_top_k_indices]
 
     # Combine all similarities and their corresponding token IDs
@@ -144,7 +164,9 @@ def get_combined_top_k_tokens_control(start_of_turn_similarities: np.ndarray, mo
     all_positions = []
 
     # Add start_of_turn similarities
-    for token_id, similarity in zip(start_of_turn_top_k_indices, start_of_turn_top_k_similarities):
+    for token_id, similarity in zip(
+        start_of_turn_top_k_indices, start_of_turn_top_k_similarities
+    ):
         all_similarities.append(similarity)
         all_token_ids.append(token_id)
         all_positions.append("start_of_turn")
@@ -177,25 +199,35 @@ def get_combined_top_k_tokens_control(start_of_turn_similarities: np.ndarray, mo
         seen_tokens.add(token_id)
 
         token_str = tokenizer.decode([token_id])
-        top_k_tokens.append({
-            "rank": len(top_k_tokens) + 1,
-            "token_id": int(token_id),
-            "token": token_str,
-            "similarity": float(similarity),
-            "position": position
-        })
+        top_k_tokens.append(
+            {
+                "rank": len(top_k_tokens) + 1,
+                "token_id": int(token_id),
+                "token": token_str,
+                "similarity": float(similarity),
+                "position": position,
+            }
+        )
 
     return top_k_tokens
 
 
-def get_combined_top_k_tokens_pronouns(pronoun_similarities: List[np.ndarray], pronoun_positions: List[int], tokenizer, k: int) -> List[Dict[str, Any]]:
-    """Get top-k most similar tokens from all pronoun positions, sorted by similarity scores."""
+def get_combined_top_k_tokens_control_multi(
+    control_similarities: List[np.ndarray],
+    control_positions: List[int],
+    tokenizer,
+    k: int,
+) -> List[Dict[str, Any]]:
+    """Get top-k most similar tokens from all control positions, sorted by similarity scores.
+
+    This is a generalized version that works with any number of control tokens.
+    """
     # Collect all similarities and their corresponding token IDs and positions
     all_similarities = []
     all_token_ids = []
     all_positions = []
 
-    for pos_idx, (pos, similarities) in enumerate(zip(pronoun_positions, pronoun_similarities)):
+    for pos, similarities in zip(control_positions, control_similarities):
         # Get top-k indices from this position
         top_k_indices = np.argsort(similarities)[-k:][::-1]
         top_k_similarities = similarities[top_k_indices]
@@ -228,13 +260,75 @@ def get_combined_top_k_tokens_pronouns(pronoun_similarities: List[np.ndarray], p
         seen_tokens.add(token_id)
 
         token_str = tokenizer.decode([token_id])
-        top_k_tokens.append({
-            "rank": len(top_k_tokens) + 1,
-            "token_id": int(token_id),
-            "token": token_str,
-            "similarity": float(similarity),
-            "position": int(position)
-        })
+        top_k_tokens.append(
+            {
+                "rank": len(top_k_tokens) + 1,
+                "token_id": int(token_id),
+                "token": token_str,
+                "similarity": float(similarity),
+                "position": int(position),
+            }
+        )
+
+    return top_k_tokens
+
+
+def get_combined_top_k_tokens_pronouns(
+    pronoun_similarities: List[np.ndarray],
+    pronoun_positions: List[int],
+    tokenizer,
+    k: int,
+) -> List[Dict[str, Any]]:
+    """Get top-k most similar tokens from all pronoun positions, sorted by similarity scores."""
+    # Collect all similarities and their corresponding token IDs and positions
+    all_similarities = []
+    all_token_ids = []
+    all_positions = []
+
+    for pos_idx, (pos, similarities) in enumerate(
+        zip(pronoun_positions, pronoun_similarities)
+    ):
+        # Get top-k indices from this position
+        top_k_indices = np.argsort(similarities)[-k:][::-1]
+        top_k_similarities = similarities[top_k_indices]
+
+        # Add to combined list
+        for token_id, similarity in zip(top_k_indices, top_k_similarities):
+            all_similarities.append(similarity)
+            all_token_ids.append(token_id)
+            all_positions.append(pos)
+
+    # Sort by similarity scores (descending)
+    sorted_indices = np.argsort(all_similarities)[::-1]
+
+    # Take top-k overall
+    top_k_tokens = []
+    seen_tokens = set()  # To avoid duplicates
+
+    for i, sorted_idx in enumerate(sorted_indices):
+        if len(top_k_tokens) >= k:
+            break
+
+        token_id = all_token_ids[sorted_idx]
+        similarity = all_similarities[sorted_idx]
+        position = all_positions[sorted_idx]
+
+        # Skip if we've already seen this token (keep highest similarity)
+        if token_id in seen_tokens:
+            continue
+
+        seen_tokens.add(token_id)
+
+        token_str = tokenizer.decode([token_id])
+        top_k_tokens.append(
+            {
+                "rank": len(top_k_tokens) + 1,
+                "token_id": int(token_id),
+                "token": token_str,
+                "similarity": float(similarity),
+                "position": int(position),
+            }
+        )
 
     return top_k_tokens
 
@@ -264,7 +358,7 @@ def process_input_output_pair_control(
     # Create the full conversation
     messages = [
         {"role": "user", "content": user_prompt},
-        {"role": "assistant", "content": model_response}
+        {"role": "assistant", "content": model_response},
     ]
 
     # Apply chat template to get the full sequence
@@ -276,7 +370,9 @@ def process_input_output_pair_control(
     )
 
     # Tokenize the sequence
-    tokens = tokenizer.encode(formatted_sequence, add_special_tokens=False, return_tensors="pt")
+    tokens = tokenizer.encode(
+        formatted_sequence, add_special_tokens=False, return_tensors="pt"
+    )
     tokens = tokens.squeeze(0)  # Remove batch dimension
 
     # Find the second <start_of_turn> position
@@ -286,37 +382,48 @@ def process_input_output_pair_control(
         return {
             "user_prompt": user_prompt,
             "model_response": model_response,
-            "error": "Second <start_of_turn> token not found",
+            "error": "Assistant turn start token not found",
             "start_of_turn_position": None,
             "model_position": None,
-            "top_k_tokens": []
+            "top_k_tokens": [],
         }
 
-    # Check if we have the "model" token after <start_of_turn>
-    model_position = start_of_turn_position + 1
-    if model_position >= len(tokens):
+    # Get control token count for this model architecture
+    control_token_count = get_assistant_control_token_count(tokenizer)
+
+    # Check if we have all control tokens
+    if start_of_turn_position + control_token_count - 1 >= len(tokens):
         return {
             "user_prompt": user_prompt,
             "model_response": model_response,
-            "error": "Model token position not found after <start_of_turn>",
+            "error": "Not enough tokens for assistant control sequence",
             "start_of_turn_position": start_of_turn_position,
             "model_position": None,
-            "top_k_tokens": []
+            "top_k_tokens": [],
         }
+
+    # For backward compatibility, model_position refers to the last control token
+    model_position = start_of_turn_position + control_token_count - 1
 
     # Extract residual similarities at the target layer
     try:
         similarities = extract_residual_similarities(model, tokens, target_layer)
 
-        # Get similarities at both control token positions
-        start_of_turn_similarities = similarities[start_of_turn_position, :]
-        model_similarities = similarities[model_position, :]
+        # Get similarities at all control token positions
+        control_positions = list(
+            range(start_of_turn_position, start_of_turn_position + control_token_count)
+        )
+        control_similarities = [similarities[pos, :] for pos in control_positions]
 
-        # Get combined top-k similar tokens from both positions
-        top_k_tokens = get_combined_top_k_tokens_control(start_of_turn_similarities, model_similarities, tokenizer, top_k)
+        # Get combined top-k similar tokens from all control positions
+        top_k_tokens = get_combined_top_k_tokens_control_multi(
+            control_similarities, control_positions, tokenizer, top_k
+        )
 
         # Get the actual tokens at these positions for verification
-        start_of_turn_actual_token = tokenizer.decode([tokens[start_of_turn_position].item()])
+        start_of_turn_actual_token = tokenizer.decode(
+            [tokens[start_of_turn_position].item()]
+        )
         model_actual_token = tokenizer.decode([tokens[model_position].item()])
 
         result = {
@@ -327,7 +434,7 @@ def process_input_output_pair_control(
             "sequence_length": len(tokens),
             "start_of_turn_actual_token": start_of_turn_actual_token,
             "model_actual_token": model_actual_token,
-            "top_k_tokens": top_k_tokens
+            "top_k_tokens": top_k_tokens,
         }
 
         return result
@@ -337,9 +444,13 @@ def process_input_output_pair_control(
             "user_prompt": user_prompt,
             "model_response": model_response,
             "error": f"Error processing: {str(e)}",
-            "start_of_turn_position": int(start_of_turn_position) if start_of_turn_position != -1 else None,
-            "model_position": int(model_position) if model_position < len(tokens) else None,
-            "top_k_tokens": []
+            "start_of_turn_position": int(start_of_turn_position)
+            if start_of_turn_position != -1
+            else None,
+            "model_position": int(model_position)
+            if model_position < len(tokens)
+            else None,
+            "top_k_tokens": [],
         }
 
 
@@ -368,7 +479,7 @@ def process_input_output_pair_pronouns(
     # Create the full conversation
     messages = [
         {"role": "user", "content": user_prompt},
-        {"role": "assistant", "content": model_response}
+        {"role": "assistant", "content": model_response},
     ]
 
     # Apply chat template to get the full sequence
@@ -380,23 +491,29 @@ def process_input_output_pair_pronouns(
     )
 
     # Tokenize the sequence
-    tokens = tokenizer.encode(formatted_sequence, add_special_tokens=False, return_tensors="pt")
+    tokens = tokenizer.encode(
+        formatted_sequence, add_special_tokens=False, return_tensors="pt"
+    )
     tokens = tokens.squeeze(0)  # Remove batch dimension
 
     # Find the second <start_of_turn> position for reference
     start_of_turn_position = find_second_start_of_turn_position(tokens, tokenizer)
 
     # Find all first person pronoun positions in the user prompt only
-    pronoun_positions = find_first_person_pronoun_positions(tokens, tokenizer, start_of_turn_position)
+    pronoun_positions = find_first_person_pronoun_positions(
+        tokens, tokenizer, start_of_turn_position
+    )
 
     if len(pronoun_positions) == 0:
         return {
             "user_prompt": user_prompt,
             "model_response": model_response,
             "error": "No first person pronouns found in the prompt",
-            "start_of_turn_position": int(start_of_turn_position) if start_of_turn_position != -1 else None,
+            "start_of_turn_position": int(start_of_turn_position)
+            if start_of_turn_position != -1
+            else None,
             "pronoun_positions": [],
-            "top_k_tokens": []
+            "top_k_tokens": [],
         }
 
     # Extract residual similarities at the target layer
@@ -409,7 +526,9 @@ def process_input_output_pair_pronouns(
             pronoun_similarities.append(similarities[pos, :])
 
         # Get combined top-k similar tokens from all pronoun positions
-        top_k_tokens = get_combined_top_k_tokens_pronouns(pronoun_similarities, pronoun_positions, tokenizer, top_k)
+        top_k_tokens = get_combined_top_k_tokens_pronouns(
+            pronoun_similarities, pronoun_positions, tokenizer, top_k
+        )
 
         # Get the actual tokens at these positions for verification
         pronoun_actual_tokens = []
@@ -420,12 +539,14 @@ def process_input_output_pair_pronouns(
         result = {
             "user_prompt": user_prompt,
             "model_response": model_response,
-            "start_of_turn_position": int(start_of_turn_position) if start_of_turn_position != -1 else None,
+            "start_of_turn_position": int(start_of_turn_position)
+            if start_of_turn_position != -1
+            else None,
             "pronoun_positions": [int(pos) for pos in pronoun_positions],
             "sequence_length": len(tokens),
             "pronoun_actual_tokens": pronoun_actual_tokens,
             "num_pronouns_found": len(pronoun_positions),
-            "top_k_tokens": top_k_tokens
+            "top_k_tokens": top_k_tokens,
         }
 
         return result
@@ -435,9 +556,13 @@ def process_input_output_pair_pronouns(
             "user_prompt": user_prompt,
             "model_response": model_response,
             "error": f"Error processing: {str(e)}",
-            "start_of_turn_position": int(start_of_turn_position) if start_of_turn_position != -1 else None,
-            "pronoun_positions": [int(pos) for pos in pronoun_positions] if len(pronoun_positions) > 0 else [],
-            "top_k_tokens": []
+            "start_of_turn_position": int(start_of_turn_position)
+            if start_of_turn_position != -1
+            else None,
+            "pronoun_positions": [int(pos) for pos in pronoun_positions]
+            if len(pronoun_positions) > 0
+            else [],
+            "top_k_tokens": [],
         }
 
 
@@ -479,7 +604,9 @@ def process_prompt_ssc(
         add_special_tokens=False,
     )
 
-    tokens = tokenizer.encode(formatted_sequence, add_special_tokens=False, return_tensors="pt").squeeze(0)
+    tokens = tokenizer.encode(
+        formatted_sequence, add_special_tokens=False, return_tensors="pt"
+    ).squeeze(0)
     ssc_token_ids = tokenizer.encode(ssc_content, add_special_tokens=False)
 
     full_ids = tokens.tolist()
@@ -507,13 +634,15 @@ def process_prompt_ssc(
         pos = base_pos + offset
         pos_probs = similarities[pos, :]
         topk_for_pos = get_top_k_tokens_ssc(pos_probs, tokenizer, top_k)
-        predictions.append({
-            "position": int(pos),
-            "ssc_token_index": int(offset),
-            "ssc_token_id": int(ssc_tok),
-            "ssc_token": tokenizer.decode([int(ssc_tok)]),
-            "top_k": topk_for_pos,
-        })
+        predictions.append(
+            {
+                "position": int(pos),
+                "ssc_token_index": int(offset),
+                "ssc_token_id": int(ssc_tok),
+                "ssc_token": tokenizer.decode([int(ssc_tok)]),
+                "top_k": topk_for_pos,
+            }
+        )
 
     return {
         "user_prompt": prompt_text,
@@ -536,13 +665,13 @@ def main():
         type=str,
         required=True,
         choices=["control", "pronouns", "ssc"],
-        help="Mode of operation: 'control' for control tokens (<start_of_turn>, model), 'pronouns' for first person pronouns, or 'ssc' for secret side constraint tokens."
+        help="Mode of operation: 'control' for control tokens (<start_of_turn>, model), 'pronouns' for first person pronouns, or 'ssc' for secret side constraint tokens.",
     )
     parser.add_argument(
         "--model_name",
         type=str,
         required=True,
-        help="Name of the model to load for analysis."
+        help="Name of the model to load for analysis.",
     )
     parser.add_argument(
         "--data_file",
@@ -574,28 +703,15 @@ def main():
         default=None,
         help="Device to run the model on (cuda/cpu).",
     )
-    parser.add_argument(
-        "--seed",
-        type=int,
-        default=None,
-        help="Random seed for reproducible results.",
-    )
 
     args = parser.parse_args()
 
     load_dotenv()
 
-    # Set random seed for reproducibility
-    if args.seed is not None:
-        random.seed(args.seed)
-        np.random.seed(args.seed)
-        torch.manual_seed(args.seed)
-        if torch.cuda.is_available():
-            torch.cuda.manual_seed_all(args.seed)
-        print(f"Set random seed to {args.seed}")
-
     # Configuration
-    DEVICE = args.device if args.device else ("cuda" if torch.cuda.is_available() else "cpu")
+    DEVICE = (
+        args.device if args.device else ("cuda" if torch.cuda.is_available() else "cpu")
+    )
 
     # Load the model for residual stream analysis
     print(f"Loading model: {args.model_name} on {DEVICE}")
@@ -604,21 +720,31 @@ def main():
     # Validate layer number
     num_layers = len(model.model.layers)
     if args.layer >= num_layers or args.layer < 0:
-        print(f"Error: Layer {args.layer} is out of range. Model has {num_layers} layers (0-{num_layers-1})")
+        print(
+            f"Error: Layer {args.layer} is out of range. Model has {num_layers} layers (0-{num_layers - 1})"
+        )
         sys.exit(1)
 
     print(f"Model has {num_layers} layers, analyzing layer {args.layer}")
 
     # Mode-specific information
     if args.mode == "control":
+        model_family = detect_model_family(tokenizer)
+        control_count = get_assistant_control_token_count(tokenizer)
         print("Mode: Control tokens")
-        print("Will extract residual stream similarities at control token positions: <start_of_turn> and 'model'")
+        print(
+            f"Will extract residual stream similarities at {control_count} assistant control token positions ({model_family} format)"
+        )
         method_name = "residual_stream_similarity"
         filename_mode = "residual_similarity_control_tokens"
     elif args.mode == "pronouns":
         print("Mode: Pronouns")
-        print("Will extract residual stream similarities at first person pronoun token positions in the user prompt only")
-        print("First person pronouns: i, me, my, mine, we, us, our, ours (including with leading whitespace)")
+        print(
+            "Will extract residual stream similarities at first person pronoun token positions in the user prompt only"
+        )
+        print(
+            "First person pronouns: i, me, my, mine, we, us, our, ours (including with leading whitespace)"
+        )
         method_name = "residual_stream_similarity_pronouns"
         filename_mode = "residual_similarity_pronouns_tokens"
     else:  # ssc
@@ -706,7 +832,11 @@ def main():
         print(f"Processing {len(input_output_pairs)} input-output pairs...")
 
         # Select processing function based on mode
-        process_function = process_input_output_pair_control if args.mode == "control" else process_input_output_pair_pronouns
+        process_function = (
+            process_input_output_pair_control
+            if args.mode == "control"
+            else process_input_output_pair_pronouns
+        )
 
         for pair_data in tqdm(input_output_pairs, desc="Processing pairs"):
             user_prompt = pair_data.get("user_prompt", "")
@@ -745,9 +875,10 @@ def main():
             "top_k": args.top_k,
             "mode": args.mode,
             "method": method_name,
-            "seed": args.seed,
             "total_pairs" if args.mode != "ssc" else "total_prompts": total_pairs,
-            "processed_pairs" if args.mode != "ssc" else "processed_prompts": processed_pairs,
+            "processed_pairs"
+            if args.mode != "ssc"
+            else "processed_prompts": processed_pairs,
             "error_count": error_count,
             "experiment_timestamp": datetime.now().isoformat(),
         },
@@ -759,14 +890,8 @@ def main():
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     model_name_safe = args.model_name.replace("/", "_")
 
-    # Extract inference filename (without extension) to include in output filename
-    inference_filename = os.path.basename(args.data_file).replace(".json", "")
-
-    # Include seed in filename if provided
-    seed_suffix = f"_seed{args.seed}" if args.seed is not None else ""
-
     # Construct output filename
-    filename = f"{filename_mode}_layer{args.layer}_k{args.top_k}_{model_name_safe}_on_{inference_filename}{seed_suffix}_{timestamp}.json"
+    filename = f"{filename_mode}_layer{args.layer}_k{args.top_k}_{model_name_safe}_{timestamp}.json"
     output_path = os.path.join(args.output_dir, filename)
 
     try:

@@ -17,7 +17,6 @@ NUM_FEATURES=50
 NUM_TOKENS_PER_FEATURE=20
 BATCH_SIZE=50
 TEMPERATURE=0.0
-LAYER=23
 PROMPT_TEMPLATE="prompts/gender/auditor_guess_tokens.txt"
 # Check if data directory exists
 if [ ! -d "$DATA_DIR" ]; then
@@ -38,19 +37,25 @@ mkdir -p "$OUTPUT_DIR"
 for DATA_FILE in "${JSON_FILES[@]}"; do
     echo "  Processing: $(basename "$DATA_FILE")"
 
-    python3 utils/guess_secret_word.py \
-        --model_name "$AUDITOR_MODEL" \
-        --data_file "$DATA_FILE" \
-        --mode "$MODE" \
-        --num_guesses $NUM_GUESSES \
-        --num_features $NUM_FEATURES \
-        --num_tokens $NUM_TOKENS_PER_FEATURE \
-        --output_dir "$OUTPUT_DIR" \
-        --template_file "$PROMPT_TEMPLATE" \
-        --batch_size $BATCH_SIZE \
-        --temperature $TEMPERATURE \
-        --target_words "$TARGET_WORD" \
-        --layer $LAYER
+    PYTHON_CMD=(python3 utils/guess_secret_word.py
+        --model_name "$AUDITOR_MODEL"
+        --data_file "$DATA_FILE"
+        --mode "$MODE"
+        --num_guesses $NUM_GUESSES
+        --num_features $NUM_FEATURES
+        --num_tokens $NUM_TOKENS_PER_FEATURE
+        --output_dir "$OUTPUT_DIR"
+        --template_file "$PROMPT_TEMPLATE"
+        --batch_size $BATCH_SIZE
+        --temperature $TEMPERATURE
+        --target_words "$TARGET_WORD"
+    )
+
+    if [ "${USE_OPENROUTER:-0}" = "1" ]; then
+        PYTHON_CMD+=(--openrouter_model)
+    fi
+
+    "${PYTHON_CMD[@]}"
 done
 
-echo "Auditor SAE Feature Descriptions Guessing completed!"
+echo "Auditor SAE Feature Tokens Guessing completed!"

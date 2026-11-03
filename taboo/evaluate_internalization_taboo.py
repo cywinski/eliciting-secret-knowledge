@@ -253,6 +253,8 @@ def main():
 
         df = pd.DataFrame(score_data)
 
+        # create directory if it doesn't exist
+        os.makedirs(os.path.dirname(args.output_csv), exist_ok=True)
         # Check if CSV file exists and append if it does
         if os.path.exists(args.output_csv):
             df.to_csv(args.output_csv, mode="a", header=False, index=False)
