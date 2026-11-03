@@ -14,10 +14,10 @@ from matplotlib.patches import Patch
 # PLOT CONFIGURATION (matches fig_metrics_direct_combined_both_auditors.py)
 # =============================================================================
 
-FIGURE_SIZE = (6.6, 4.6)
+FIGURE_SIZE = (5.6, 4.2)
 FIGURE_DPI = 300
 
-BAR_WIDTH = 0.2
+BAR_WIDTH = 0.15
 BAR_EDGE_COLOR = "black"
 BAR_EDGE_WIDTH = 0.7
 
