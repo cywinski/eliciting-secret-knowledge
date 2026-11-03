@@ -1,5 +1,5 @@
-# ABOUTME: Bar plot of the multi-turn agentic auditing results (paper Section 6): success rate with
-# ABOUTME: Wilson 95% intervals (left) and mean detection turn with bootstrap 95% intervals (right).
+# ABOUTME: Bar plot of the multi-turn agentic auditing results (paper Section 6): auditor success rate
+# ABOUTME: per auditing agent and elicitation method, with Wilson 95% intervals.
 
 # %%
 import json
@@ -14,7 +14,7 @@ from matplotlib.patches import Patch
 # PLOT CONFIGURATION (matches fig_metrics_direct_combined_both_auditors.py)
 # =============================================================================
 
-FIGURE_SIZE = (8.4, 4.4)
+FIGURE_SIZE = (6.6, 4.6)
 FIGURE_DPI = 300
 
 BAR_WIDTH = 0.2
@@ -39,7 +39,6 @@ GRID_ALPHA = 0.25
 GRID_LINESTYLE = "--"
 
 # Sized for a half-width wrapfigure: printed font size matches the full-width figures.
-TITLE_FONT_SIZE = 17
 AXIS_LABEL_FONT_SIZE = 16
 TICK_LABEL_FONT_SIZE = 14
 LEGEND_FONT_SIZE = 14
@@ -63,11 +62,11 @@ def wilson_interval(k, n, z=1.959964):
 
 
 def load_results():
-    """Pool success counts over the two User Gender organisms; read mean detection turns."""
+    """Pool success counts over the two User Gender organisms."""
     with open(RESULTS_FILE, "r") as f:
         data = json.load(f)
     n_cell = data["n_per_cell"]
-    success, detection, detection_ci = {}, {}, {}
+    success = {}
     for auditor in AUDITORS:
         organisms = data["success"][auditor]
         for key, _, _ in METHODS:
@@ -75,9 +74,7 @@ def load_results():
             n = n_cell * len(organisms)
             lo, hi = wilson_interval(k, n)
             success[(auditor, key)] = (100 * k / n, lo, hi, k, n)
-            detection[(auditor, key)] = data["mean_detection_turn_successful_only"][auditor][key]
-            detection_ci[(auditor, key)] = data["detection_turn_ci95_bootstrap"][auditor][key]
-    return success, detection, detection_ci
+    return success
 
 
 # %%
@@ -86,7 +83,7 @@ def load_results():
 # =============================================================================
 
 
-def style_axis(ax, ylabel, ymax, ystep, title):
+def style_axis(ax, ylabel, ymax, ystep):
     """Apply the shared axis styling of the paper's bar plots."""
     x = np.arange(len(AUDITORS))
     ax.set_xticks(x)
@@ -97,46 +94,30 @@ def style_axis(ax, ylabel, ymax, ystep, title):
     ax.set_yticks(ticks)
     ax.set_yticklabels([f"{t:.0f}" for t in ticks], fontsize=TICK_LABEL_FONT_SIZE)
     ax.set_ylabel(ylabel, fontsize=AXIS_LABEL_FONT_SIZE)
-    ax.set_title(title, fontsize=TITLE_FONT_SIZE)
     ax.grid(True, axis="y", alpha=GRID_ALPHA, linestyle=GRID_LINESTYLE)
     ax.set_axisbelow(True)
 
 
-def create_plot(success, detection, detection_ci):
-    """Two panels: success rate (Wilson 95% CI) and mean detection turn (bootstrap 95% CI where available)."""
-    fig, (ax_sr, ax_turn) = plt.subplots(
-        1, 2, figsize=FIGURE_SIZE, dpi=FIGURE_DPI, gridspec_kw={"wspace": 0.42}
-    )
+def create_plot(success):
+    """Grouped bars of success rate with Wilson 95% intervals."""
+    fig, ax = plt.subplots(figsize=FIGURE_SIZE, dpi=FIGURE_DPI)
     x = np.arange(len(AUDITORS))
     for i, (key, label, color) in enumerate(METHODS):
         pos = x + i * BAR_WIDTH - (len(METHODS) - 1) * BAR_WIDTH / 2
         rates = [success[(a, key)][0] for a in AUDITORS]
         err_lo = [success[(a, key)][0] - success[(a, key)][1] for a in AUDITORS]
         err_hi = [success[(a, key)][2] - success[(a, key)][0] for a in AUDITORS]
-        ax_sr.bar(pos, rates, BAR_WIDTH, label=label, color=color, alpha=alpha,
-                  edgecolor=BAR_EDGE_COLOR, linewidth=BAR_EDGE_WIDTH)
-        ax_sr.errorbar(pos, rates, yerr=[err_lo, err_hi], fmt="none", color="black",
-                       capsize=ERROR_CAP_SIZE, capthick=ERROR_CAP_WIDTH,
-                       elinewidth=ERROR_LINE_WIDTH)
-        turns = [detection[(a, key)] for a in AUDITORS]
-        ax_turn.bar(pos, turns, BAR_WIDTH, color=color, alpha=alpha,
-                    edgecolor=BAR_EDGE_COLOR, linewidth=BAR_EDGE_WIDTH)
-        for x_i, a in zip(pos, AUDITORS):
-            ci = detection_ci[(a, key)]
-            if ci is None:  # per-investigation turns unavailable for this cell
-                continue
-            m = detection[(a, key)]
-            ax_turn.errorbar([x_i], [m], yerr=[[m - ci[0]], [ci[1] - m]], fmt="none", color="black",
-                             capsize=ERROR_CAP_SIZE, capthick=ERROR_CAP_WIDTH, elinewidth=ERROR_LINE_WIDTH)
-
-    style_axis(ax_sr, "Success rate (%)", 105.0, 25.0, "Final report")
-    style_axis(ax_turn, "Mean detection turn", 20.5, 5.0, "Detection speed")
+        ax.bar(pos, rates, BAR_WIDTH, label=label, color=color, alpha=alpha,
+               edgecolor=BAR_EDGE_COLOR, linewidth=BAR_EDGE_WIDTH)
+        ax.errorbar(pos, rates, yerr=[err_lo, err_hi], fmt="none", color="black",
+                    capsize=ERROR_CAP_SIZE, capthick=ERROR_CAP_WIDTH, elinewidth=ERROR_LINE_WIDTH)
+    style_axis(ax, "Success rate (%)", 105.0, 25.0)
 
     handles = [
         Patch(facecolor=color, edgecolor=BAR_EDGE_COLOR, label=label, alpha=alpha)
         for _, label, color in METHODS
     ]
-    fig.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.5, 0.93), ncol=2,
+    fig.legend(handles=handles, loc="lower center", bbox_to_anchor=(0.5, 0.97), ncol=2,
                columnspacing=0.9, handletextpad=0.4, framealpha=0.0, fontsize=LEGEND_FONT_SIZE)
     plt.tight_layout()
     Path(OUT_STEM).parent.mkdir(parents=True, exist_ok=True)
@@ -147,10 +128,9 @@ def create_plot(success, detection, detection_ci):
 
 # %%
 if __name__ == "__main__":
-    success, detection, detection_ci = load_results()
+    success = load_results()
     for (auditor, key), (rate, lo, hi, k, n) in success.items():
-        print(f"{auditor:13s} {key:18s} {k:3d}/{n} = {rate:5.1f}% [{lo:4.1f}-{hi:5.1f}]"
-              f"  detection turn {detection[(auditor, key)]:.1f}")
-    create_plot(success, detection, detection_ci)
+        print(f"{auditor:13s} {key:18s} {k:3d}/{n} = {rate:5.1f}% [{lo:4.1f}-{hi:5.1f}]")
+    create_plot(success)
 
 # %%
